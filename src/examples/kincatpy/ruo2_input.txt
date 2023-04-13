@@ -1,0 +1,80 @@
+& CRYSTAL test # creation of the crystal with n vector of n components
+6.43 0.0
+0.0 3.12
+& BASIS s 2
+0 0 0 
+1 0.5 0 
+& UNIQUEPOS 2 # describes the sites in the crystal that the atoms and defect will occupy.
+s 0 0 
+s 0.5 0 
+& RANGE 3.0  # the float is the interaction radius
+& SPECIES 2
+2 1 1 O 0.1
+2 1 1 CO 0.1
+& PROCMECH
+#adsorption events
+%% 1 CO_ads_cus
+s 0.5 0 0 > 2 
+%% 1 CO_ads_br
+s 0 0 0 > 2
+%% 2 O_ads_cus_cus
+s 0.5 0 0 > 1
+s 0.5 1 0 > 1
+%% 2 O_ads_br_br
+s 0 0 0 > 1 
+s 0 1 0 > 1 
+%% 2 O_ads_br_cus
+s 0 0 0 > 1 
+s 0.5 0 0 > 1 
+#desorption events
+%% 1 CO_des_cus
+s 0.5 0 2 > 0
+%% 1 CO_des_br
+s 0 0 2 > 0
+%% 2 O_des_cus_cus
+s 0.5 0 1 > 0 
+s 0.5 1 1 > 0 
+%% 2 O_des_br_br
+s 0 0 1 > 0
+s 0 1 1 > 0 
+%% 2 O_des_br_cus
+s 0 0 1 > 0
+s 0.5 0 1 > 0
+##diffusion events
+%% 2 CO_cus_cus
+s 0.5 0 2 > 0 
+s 0.5 1 0 > 2 
+%% 2 CO_br_br
+s 0 0 2 > 0
+s 0 1 0 > 2
+%% 2 CO_cus_br
+s 0.5 0 2 > 0
+s 0 0 0 > 2
+%% 2 CO_br_cus
+s 0 0 2 > 0
+s 1/2 0 0 > 2
+%% 2 O_cus_cus
+s 0.5 0 1 > 0
+s 0.5 1 0 > 1
+%% 2 O_br_br
+s 0 0 1 > 0
+s 0 1 0 > 1
+%% 2 O_cus_br
+s 0.5 0 1 > 0
+s 0 0 0 > 1
+%% 2 O_br_cus
+s 0 0 1 > 0
+s 1/2 0 0 > 1
+##Recombination/desorption of CO2
+%% 2 CO_cus_O_cus
+s 0.5 1 1 > 0
+s 0.5 0 2 > 0
+%% 2 CO_br_O_br
+s 0 1 1 > 0
+s 0 0 2 > 0
+%% 2 O_br_CO_cus
+s 0 0 1 > 0
+s 0.5 0 2 > 0
+%% 2 CO_br_O_cus
+s 0 0 2 > 0
+s 0.5 0 1 > 0
