@@ -1,0 +1,59 @@
+{
+    "kincat": {
+	"dictionary" : "../RuO2-dictionary.json",
+	"rates" : "../RuO2-rates.json",
+	"sites" : {
+	    "lattice" : [ 25, 25, 2 ],	    
+	    "type" : "random",
+	    "random seed" : 13542,
+	    "random fill ratio" : 0.3,
+	    "filename" : "dump-sites-batch.json"
+	},
+	"dump" : {
+		"dump filename" : "dump-ex3.json",
+		"dump interval" : 5E-7
+	},
+	"statistics" : {
+		"stats filename" : "stats-ex3.json",
+		"types" : ["species_coverage","process_counts"],
+		"stats interval" : 4E-7
+	},
+	"solver" : {
+	    "type" : "batch-rta",
+	    "random seed" : 13542,
+	    "random pool size" : 1E6,
+	    "max number of kmc kernel launches" : 100,
+	    "max number of kmc steps per kernel launch" : 1000000,
+	    "time range" : [ 0, 10, 1E-7 ]
+	},
+	"ensemble" : {
+	    "number of samples" : 4,
+	    "solver random number variations" :{
+			"apply" : "enabled",
+	    },
+	    "sites random variations" : {
+			"apply" : "disabled",
+			"random fill ratio" : [ 0.3 ]
+	    },
+	    "rates variations" : {
+			"apply" : "enabled",
+			"type" : "file",
+			"processes" :  ["CO_ads_cus", "CO_ads_br"],
+			"process rates" : {
+				"0" : [1.85e+06 , 2.15e+06 ],
+				"1" : [1.90e+06 , 2.10e+06 ],
+				"2" : [1.95e+06 , 2.05e+06 ],
+				"3" : [2.00e+06 , 2.00e+06 ]
+				},
+			"process instances" : [0 , 1],
+			"instance rates" : {
+				"0" : [1.85e+06 , 2.15e+06 ],
+				"1" : [1.90e+06 , 2.10e+06 ],
+				"2" : [1.95e+06 , 2.05e+06 ],
+				"3" : [2.00e+06 , 2.00e+06 ]
+				},
+			"override filename" : "../input-rates-override-RuO2.json"	
+	    	}
+		}	
+    }
+}
