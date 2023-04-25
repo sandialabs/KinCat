@@ -1,0 +1,29 @@
+{
+    "default rate": -1, /* if not specified processes or events, the default rate is used to set the event rate */
+	"process specific rates" : {
+    "CO_ads_cus" : 2.04E+06 ,
+    "CO_ads_br" : 2.04E+06,
+    "O_ads_cus_cus" : 3.81E+03,
+    "O_ads_br_br" : 3.81E+03,
+    "O_ads_br_cus" : 3.81E+03,
+    "CO_des_cus" : 1.82E+07,
+    "CO_des_br" : 5.50E+04,
+    "O_des_cus_cus" : 1.12E+02,
+    "O_des_br_br" : 1.63E-20, 
+    "O_des_br_cus" : 1.35E-09, 
+    "CO_cus_cus" : 6.57E-02, 
+    "CO_br_br" : 1.14E+08, 
+    "CO_cus_br" : 1.50E+02, 
+    "CO_br_cus" : 4.55E-01, 
+    "O_cus_cus" : 4.55E-01, 
+    "O_br_br" : 1.65E+07, 
+    "O_cus_br" : 4.98E+04, 
+    "O_br_cus" : 6.00E-07, 
+    "CO_cus_O_cus" : 3.45E+05, 
+    "CO_br_O_br" : 3.14E+00, 
+    "O_br_CO_cus" : 1.04E+03, 
+    "CO_br_O_cus" : 2.38E+06
+    },
+    "process instance specific rates": {
+    }
+}

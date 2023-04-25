@@ -1,0 +1,30 @@
+{
+    "kincat": {
+	"dictionary" : "../example/RuO2/input-dictionary-RuO2-instances.json",
+	"rates" : "../example/RuO2/input-rates-new.json",
+	"sites" : {
+	    "lattice" : [ 10, 10, 2 ],	    
+	    "type" : "random",
+	    "random seed" : 12345,
+	    "random fill ratio" : 0.0,
+	    "filename" : "dump-sites.json"
+	},
+	"dump" : {
+		"dump filename" : "dump.json",
+		"dump interval" : 5E-7
+	},
+	"statistics" : {
+		"stats filename" : "stats.json",
+		"types" : ["species_coverage","process_counts"],
+		"stats interval" : 4E-7
+	},
+	"solver" : {
+	    "type" : "serial-rta",
+	    "random seed" : 13542,
+	    "random pool size" : 10000,
+	    "max number of kmc kernel launches" : 100,
+	    "max number of kmc steps per kernel launch" : 50,
+	    "time range" : [ 0, 1000, 0 ]
+	}
+    }
+}

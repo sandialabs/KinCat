@@ -1,0 +1,31 @@
+{
+    "kincat": {
+	"dictionary" : "test-files/input-dictionary.json",
+	"rates" : "test-files/input-rates.json",
+	"sites" : {
+	    "lattice" : [ 20, 20, 2 ],	    
+	    "type" : "random",
+	    "random seed" : 13542,
+	    "random fill ratio" : 0.3,
+	    "filename" : "dump-sites.json"
+	},
+	"dump" : {
+    "dump filename": "dump.json",
+    "dump interval": 5e-7
+  },
+  "statistics" : {
+		"stats filename" : "stats.json",
+		"types" : ["species_coverage","process_counts"],
+    "stats interval": 5e-7
+	},
+	"solver" : {
+	    "type" : "serial-rta",	    
+	    "domain" : [ 20, 20 ],
+	    "random seed" : 13542,
+	    "random pool size" : 10000,
+	    "max number of kmc kernel launches" : 100,
+	    "max number of kmc steps per kernel launch" : 200,
+	    "time range" : [ 0, 1000, 0 ]
+	}
+    }
+}

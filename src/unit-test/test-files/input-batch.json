@@ -1,0 +1,53 @@
+{
+    "kincat": {
+	"dictionary" : "test-files/input-dictionary.json",
+	"rates" : "test-files/input-rates.json",
+	"sites" : {
+	    "lattice" : [ 20, 20, 2 ],	    
+	    "type" : "random",
+	    "random seed" : 13542,
+	    "random fill ratio" : 0.3,
+	    "filename" : "dump-sites-batch.json"
+	},
+  "dump" : {
+    "dump filename": "dump.json",
+    "dump interval": 5e-7
+  },
+	"statistics" : {
+    "stats filename" : "stats.json",
+		"types" : ["species_coverage","process_counts"],
+    "stats interval": 5e-7
+	},
+	"solver" : {
+	    "type" : "batch-rta",	    
+	    "domain" : [ 20, 20 ],
+	    "interaction" : [ 3, 3 ],
+	    "random seed" : 13542,
+	    "random pool size" : 10000,
+	    "max number of kmc kernel launches" : 100,
+      "max number of kmc steps per kernel launch" : 100,
+	    "time range" : [ 0, 1000, 0 ]
+	},
+	"ensemble" : {
+	    "number of samples" : 4,
+	    "solver random number variations" :{
+		"apply" : "enabled",
+	    },
+	    "sites random variations" : {
+		"apply" : "enabled",
+		"random fill ratio" : [ 0.3 ]
+	    },
+  "rates variations" : {
+		"apply" : "enabled",
+		"type" : "inline",
+    "processes" : [ "CO_ads_cus", "CO_ads_br" ],
+		"process rates" : {
+      "0": [ 0.1, 0.2 ],
+      "1": [ 1e5, 2e6 ],
+      "2": [ 2e5, 2e6 ],
+      "3": [ 4e6, 3e6 ],
+      }
+    }
+	}	
+  }
+}
