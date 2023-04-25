@@ -1,0 +1,12 @@
+#ifndef __KINCAT_CONFIG_H__
+#define __KINCAT_CONFIG_H__
+
+/// KINCAT controls
+#cmakedefine KINCAT_ENABLE_VERBOSE
+#cmakedefine KINCAT_ENABLE_DEBUG
+
+#cmakedefine KINCAT_ENABLE_SITE_TYPE_CHAR
+#cmakedefine KINCAT_ENABLE_SITE_TYPE_SHORT
+#cmakedefine KINCAT_ENABLE_SITE_TYPE_INT
+
+#endif
