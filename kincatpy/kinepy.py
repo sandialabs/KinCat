@@ -878,7 +878,7 @@ def dupe_sort(t_list: list) -> list:
                 if not insert_flag:
                     r_list.append(t_list[t])
     if (n_dupes != len(r_list)):
-        "PROBLEM IN dupe_sort()!!!"
+        print("PROBLEM IN dupe_sort()!!!")
     return r_list
 
 
