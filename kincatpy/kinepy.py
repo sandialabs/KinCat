@@ -856,20 +856,30 @@ def apply_pbc(vec: np.ndarray) -> np.ndarray:
     return vec
 
 def dupe_sort(t_list: list) -> list:
+    n_dupes = len(t_list)
     if (len(t_list)<2):
         return t_list
     #Sorts list of list pairings by last entry. Intended for sorting duplicate jump index pairings
     r_list = []
     r_list.append(t_list[0])
     for t in range(1, len(t_list)):
-        if t_list[t][1] < r_list[0][1]:
+        if (t_list[t][1] < r_list[0][1]):
             r_list.insert(0, t_list[t])
         else: 
-            for r in range(1, len(r_list)):
-                if t_list[t][1] > r_list[r][1]:
-                    r_list.insert(r+1, t_list[t])
-                    break
-    return r_list 
+            if (len(r_list) == 1):
+                r_list.append(t_list[t])
+            else:
+                insert_flag = False 
+                for r in range(1, len(r_list)):
+                    if (t_list[t][1] < r_list[r][1]):
+                        r_list.insert(r, t_list[t])
+                        insert_flag = True
+                        break
+                if not insert_flag:
+                    r_list.append(t_list[t])
+    if (n_dupes != len(r_list)):
+        "PROBLEM IN dupe_sort()!!!"
+    return r_list
 
 
 def apply_symmetry_operations(vector_list: list, symop_list: list, unique: bool = True, applytrans: bool = True, symop_indices: bool = False) -> list:
