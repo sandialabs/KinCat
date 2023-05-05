@@ -23,7 +23,7 @@ private:
   // Statistic type flags
   bool _s_c; // species coverage
   bool _p_c; // process counts
-  bool _s_s_c; // site specific species coverageß
+  bool _s_s_c; // site specific species coverage
 
   bool _is_first;
 
