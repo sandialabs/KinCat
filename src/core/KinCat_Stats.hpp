@@ -13,6 +13,7 @@ private:
   std::vector<std::string> _stats_list;
   std::vector<std::string> _processes;
   ordinal_type _n_processes;
+  ordinal_type _n_basis_sites; 
   Lattice<DeviceType> _lattice;
 
   std::ofstream _ofstats;
@@ -22,6 +23,7 @@ private:
   // Statistic type flags
   bool _s_c; // species coverage
   bool _p_c; // process counts
+  bool _s_s_c; // site specific species coverageß
 
   bool _is_first;
 

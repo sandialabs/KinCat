@@ -30,6 +30,7 @@ ordinal_type Stats<DT>::initialize(const value_type_1d_view<real_type, host_devi
   std::unordered_map<std::string, std::string> stat_dictionary; // set of possible/recognized keys
   stat_dictionary["species_coverage"] = "species_coverage";
   stat_dictionary["process_counts"] = "process_counts";
+  stat_dictionary["site_species_coverage"] = "site_species_coverage";
 
   std::unordered_map<std::string, std::string> stat_keys; // set of keys included by user
   for (ordinal_type i = 0, iend = _stats_list.size(); i < iend; ++i) {
@@ -42,10 +43,12 @@ ordinal_type Stats<DT>::initialize(const value_type_1d_view<real_type, host_devi
   // Initialize flags for statistics types (flags should be instantiated in KinCat_Stats.hpp)
   if (stat_keys.count("species_coverage")) {
     _s_c = true;
-    // std::cout << "found species_coverage \n";
   }
   if (stat_keys.count("process_counts")) {
     _p_c = true;
+  }
+  if (stat_keys.count("site_species_coverage")) {
+    _s_s_c = true;
   }
 
   /// create initial snapshot
@@ -55,6 +58,7 @@ ordinal_type Stats<DT>::initialize(const value_type_1d_view<real_type, host_devi
   const ordinal_type n_cells_x = _lattice_host._n_cells_x;
   const ordinal_type n_cells_y = _lattice_host._n_cells_y;
   const ordinal_type n_basis_sites = n_sites / (n_cells_x * n_cells_y);
+  _n_basis_sites = n_basis_sites; //set class variable so can access in snapshot
   KINCAT_CHECK_ERROR(n_sites <= 0, "Error: sites are not created in the lattice");
 
   const std::string indent("    "), indent2(indent + indent);
@@ -62,7 +66,7 @@ ordinal_type Stats<DT>::initialize(const value_type_1d_view<real_type, host_devi
   // Initialize file header/formating of data.
   _ofstats << indent << "\"lattice size\" : [ " << n_cells_x << ", " << n_cells_y << ", " << n_basis_sites << " ], \n";
   _ofstats << indent << "\"samples\" : " << n_samples << ",\n";
-  if (_s_c) {
+  if (_s_c || _s_s_c) {
     _ofstats << indent << "\"number of species\" : " << n_species << ",\n";
   }
   if (_p_c) {
@@ -149,10 +153,12 @@ ordinal_type Stats<DT>::snapshot(const ordinal_type sid, const real_type t,
       for (ordinal_type i = 0, iend = n_sites; i < iend; ++i) {
         spec_coverages[ordinal_type(sites(i))]++;
       }
-      real_type coverage = real_type(spec_coverages[0]) / sites.size();
+      real_type denom; //coverage denominator
+      denom = sites.size();
+      real_type coverage = real_type(spec_coverages[0]) / denom;
       _ofstats << coverage;
       for (ordinal_type i = 1, iend = n_species; i < iend; ++i) {
-        coverage = real_type(spec_coverages[i]) / sites.size();
+        coverage = real_type(spec_coverages[i]) / denom;
         _ofstats << ", " << coverage;
       }
       _ofstats << " ]";
@@ -164,6 +170,36 @@ ordinal_type Stats<DT>::snapshot(const ordinal_type sid, const real_type t,
         _ofstats << ", " << process_count(i);
       }
       _ofstats << " ]";
+    }
+    if (_s_s_c) {
+      _ofstats << ",\n" << indent3 << "\"site species coverage\" : [[ ";
+      ordinal_type spec_coverages[_n_basis_sites][n_species];
+      for (ordinal_type j = 0, jend = _n_basis_sites; j < jend; j++) {
+        for (ordinal_type i = 0, iend = n_species; i < iend; ++i) {
+          spec_coverages[j][i] = 0;
+        }
+      }
+      for (ordinal_type i = 0, iend = n_sites; i < iend; ++i) {
+        ordinal_type site_type = i % _n_basis_sites;
+        spec_coverages[site_type][ordinal_type(sites(i))]++;
+      }
+      real_type denom; //coverage denominator
+      denom = sites.size()/_n_basis_sites; //equivalent to n_cells_x * n_cells_y
+      for (ordinal_type i = 0, iend = _n_basis_sites; i < iend; ++i) {
+        real_type coverage = real_type(spec_coverages[i][0]) / denom;
+        _ofstats << coverage;
+        for (ordinal_type j = 1, jend = n_species; j < jend; ++j) {
+          coverage = real_type(spec_coverages[i][j]) / denom;
+          _ofstats << ", " << coverage;
+        }
+        if (i < iend-1) {
+          _ofstats << " ], [ ";
+        }
+        else {
+          _ofstats << " ]";
+        }
+      }
+      _ofstats << "]";
     }
     _ofstats << '\n' << indent2 << "}";
     _is_first = false;
