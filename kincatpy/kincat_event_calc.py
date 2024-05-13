@@ -1,6 +1,6 @@
 '''
 ======================================================================================
-kincat version 1.0
+kincat version 1.1
 Copyright (2023) NTESS
 https://github.com/sandia/kincat
 Copyright 2023 National Technology & Engineering Solutions of Sandia, LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government retains certain rights in this software.
