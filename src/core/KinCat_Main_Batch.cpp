@@ -68,7 +68,6 @@ int main(int argc, char *argv[]) {
     ///
     KinCat::Input in;
     in.parse(input_filename, verbose_parse);
-
     /// batch mode
     const ordinal_type n_samples = in._n_samples;
 
@@ -88,8 +87,7 @@ int main(int argc, char *argv[]) {
         lattice.randomizeSites(in._site_random_fill_ratio, in._site_random_seed);
       }
     } else if (in._site_init_type == "file") {
-      KINCAT_CHECK_ERROR(
-          true, "Error: dump-batch-site.json format includes multiple samples; file IO is not implemented yet");
+      lattice.readinSites(in._sites, verbose_parse);
       /// restarting with multiple samples is tricky.
       /// the simulation should record 1) the last lattice configuration of each sample, 2) time, 3) different rates as
       /// each sample may use different rates overriden by initial ensemble input.
@@ -97,12 +95,11 @@ int main(int argc, char *argv[]) {
       /// To resolve issue 3), a user need to make sure that she/he uses the same rate configurations as is used or
       /// make sure that the simulation uses the same parameter for the runtime uncertainty.
 
-      // lattice.copySites(in._sites);
     }
-    KINCAT_CHECK_ERROR(in._n_cells_interaction_x > in._n_cells_domain_x,
-                       "Error: the domain size in x is smaller than the interaction range in x");
-    KINCAT_CHECK_ERROR(in._n_cells_interaction_y > in._n_cells_domain_y,
-                       "Error: the domain size in y is smaller than the interaction range in y");
+    KINCAT_CHECK_ERROR((in._n_cells_interaction_x * 2) + 1 > in._n_cells_domain_x,
+                       "Error: the domain size in x needs to be over twice the interaction range in x");
+    KINCAT_CHECK_ERROR((in._n_cells_interaction_y * 2) + 1 > in._n_cells_domain_y,
+                       "Error: the domain size in y needs to be over twice the interaction range in y");
     lattice.setDomain(in._n_cells_x, in._n_cells_y);
     lattice.showMe(std::cout, "Lattice", verbose);
 
@@ -134,8 +131,8 @@ int main(int argc, char *argv[]) {
           });
       Kokkos::fence();
     }
-    KinCat::ProcessDictionary<device_type> dictionary(in._variant_orderings, in._configurations, in._processints,
-                                                      in._constraints, rates_all, in._process_symmetries);
+    KinCat::ProcessDictionary<device_type> dictionary(in._variant_orderings, in._symmetry_orderings, in._configurations, in._configuration_sets, in._processints,
+                                                      in._constraints, in._process_constraints, rates_all, in._process_symmetries);
     dictionary.showMe(std::cout, "Dictionary", verbose);
     dictionary.showMe(std::cout, "Instances details", in._processes, verbose);
     r_val = dictionary.validateData(in._processes, in._process_constraints);
@@ -144,13 +141,20 @@ int main(int argc, char *argv[]) {
       break;
     }
 
-    dictionary.overrideProcessRates(in._process_override_array, in._process_rates_override_array,
-                                    in._instance_override_array, in._instance_rates_override_array, in._process_index);
+    if (in._instance_override_array.size() != 0 || in._process_override_array.size() != 0) {
+      dictionary.overrideProcessRates(in._process_override_array, in._process_rates_override_array,
+                                    in._instance_override_array, in._instance_rates_override_array, in._process_index, in._processes);
+    }
+
     if (verbose_parse > 2) {
       std::cout << "Final Rates for all Samples \n";
+      if (rates_all.extent(0) != in._n_samples) {
+        std::cout << "Rates not varied between samples \n";
+      }
+      //std::cout << "rates_all dims (0,1) : " << rates_all.extent(0) << ", " << rates_all.extent(1) << '\n';
       for (ordinal_type j = 0, j_end = rates_all.extent(1); j < j_end; j++) {
         std::cout << "Instance " << j << ": ";
-        for (ordinal_type i = 0, i_end = in._n_samples; i < i_end; i++) {
+        for (ordinal_type i = 0, i_end = rates_all.extent(0); i < i_end; i++) {
           std::cout << rates_all(i, j) << ",   ";
         }
         std::cout << '\n';
@@ -160,7 +164,7 @@ int main(int argc, char *argv[]) {
     ///
     /// create counter
     ///
-    KinCat::ProcessCounter<device_type> counter(in._processes.size(), dictionary._processints);
+    KinCat::ProcessCounter<device_type> counter(1, in._processes.size(), dictionary._processints);
     counter.initialize(n_samples);
 
     ///
@@ -172,14 +176,17 @@ int main(int argc, char *argv[]) {
     solver->initialize(in._is_solver_random_number_variation, in._solver_random_seed, in._solver_random_pool_size,
                        in._n_kmc_steps_per_kernel_launch, in._n_cells_interaction_x, in._n_cells_interaction_y, lattice,
                        dictionary, counter, verbose);
-
     solver->showMe(std::cout, in._solver_type, verbose);
 
     /// time range
     KinCat::value_type_1d_view<real_type, device_type> t(KinCat::do_not_init_tag("t"), n_samples);
-    Kokkos::deep_copy(t, in._t_begin);
+    if (in._t_sites.extent(0) == 0) { //restart file not read-in
+      Kokkos::deep_copy(t, in._t_begin); // Use this if want to restart all simulations at same t_begin ([t_begin, t_end, t_step])
+    }
+    else {
+      Kokkos::deep_copy(t,in._t_sites); // Use this to restart all samples at their previously reached times. 
+    }
     const auto t_host = Kokkos::create_mirror_view_and_copy(host_device_type(), t);
-
     real_type t_global = in._t_begin;
     const real_type t_end = in._t_end;
     const real_type t_dt = in._t_dt;
@@ -232,7 +239,7 @@ int main(int argc, char *argv[]) {
           }
         }
         solver->advance(t, t_step, n_kmc_steps_per_kernel_launch, verbose);
-
+        counter.syncToHost();
         Kokkos::Min<real_type> reducer_value(t_global);
         Kokkos::parallel_reduce(
             batch_range_policy,
