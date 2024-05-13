@@ -54,14 +54,10 @@ ordinal_type SolverSublattice<DT>::initialize(const bool is_solver_random_number
   /// set interaction range
   _n_cells_interaction_x = n_cells_interaction_x;
   _n_cells_interaction_y = n_cells_interaction_y;
-  KINCAT_CHECK_ERROR(_lattice._n_cells_x != n_cells_x, "Error: latice length x is not multiple of subdomain x");
-  KINCAT_CHECK_ERROR(_lattice._n_cells_x != n_cells_x, "Error: latice length x is not multiple of subdomain x");
-
+  
   /// uniform random values (we do not want to refill random numbers during a kmc run)
   const ordinal_type required_random_pool_size = _max_kmc_steps_per_kernel_launch * 2;
-  // const ordinal_type p0 = random_pool_size / required_random_pool_size;
-  // const ordinal_type p1 = random_pool_size % required_random_pool_size;
-
+  
   /// ignore the random pool size argument (use the minimum per kernel launch)
   // const ordinal_type actual_random_pool_size = (p0 + (p1 > 0)) * required_random_pool_size;
   const ordinal_type actual_random_pool_size = required_random_pool_size;
@@ -80,6 +76,11 @@ ordinal_type SolverSublattice<DT>::initialize(const bool is_solver_random_number
 
   /// update rates
   Impl::updateEventRatesLatticeDevice(_sid, _lattice, _dictionary, _instance_rates, verbose);
+
+  
+  //std::ofstream _sublattice_data;
+  //_sublattice_data.open("sublattice_domain_data.txt", std::ios::out | std::ios::trunc);
+
 
   return 0;
 }
@@ -122,12 +123,13 @@ ordinal_type SolverSublattice<DT>::advance(const value_type_2d_view<real_type, D
 
   /// loop over four quadrant sublattices, each with unique 'colors'.
   /// need to ensure order of quadrant looping changes.
-  bool kernel_done = false;
-
   std::vector<ordinal_type> q_order = {0, 1, 2, 3}; // colors
-
   std::shuffle(q_order.begin(), q_order.end(), random_number_generator);
-  // std::cout << "Quad Order: " << q_order[0] << q_order[1] << q_order[2] << q_order[3] << '\n';
+
+  //scratch storage for k0,k1. Need this for the team-level parallelism to work properly.
+  value_type_1d_view<ordinal_type, DT> k0_view(do_not_init_tag("k0 view"), n_domains_4);
+  value_type_1d_view<ordinal_type, DT> k1_view(do_not_init_tag("k1 view"), n_domains_4);
+  
   for (ordinal_type q = 0; q < 4; ++q) {              // loop over colors
     const ordinal_type q0 = quad[q_order[q] * 2 + 0]; // getting coordinates of quadrant
     const ordinal_type q1 = quad[q_order[q] * 2 + 1];
@@ -158,12 +160,14 @@ ordinal_type SolverSublattice<DT>::advance(const value_type_2d_view<real_type, D
                                     [=](const ordinal_type &l, real_type &update, bool final) {
                                       if (final)
                                         instance_rates_scan(l) = update;
-
                                       if (l < instance_rates_extent)
                                         update += instance_rates(l);
                                     });
               member.team_barrier();
 
+              ordinal_type &k0 = k0_view(did);
+              ordinal_type &k1 = k1_view(did); // placed outside the single() block so that these can be accessed during event rate updates below.
+              
               Kokkos::single(Kokkos::PerTeam(member), [&]() {
                 /// compute random number, sum of rates, and time increment
                 const real_type pi = random_pool(iter++);
@@ -184,7 +188,7 @@ ordinal_type SolverSublattice<DT>::advance(const value_type_2d_view<real_type, D
                 ordinal_type l0, l1;
                 lattice.getDomainLatticeCellIndex(lid, l0, l1);
 
-                ordinal_type k0, k1;
+                //ordinal_type k0, k1;
                 lattice.getLatticeCellIndex(d0, d1, l0, l1, k0, k1);
 
                 /// find instance and pattern
@@ -193,6 +197,7 @@ ordinal_type SolverSublattice<DT>::advance(const value_type_2d_view<real_type, D
                 Impl::findEvent(sid, lattice, dictionary, k0, k1, pos - instance_rates_scan(lid), idx_instance,
                                 idx_pattern, idx_variant, sum_rates_cell, verbose);
 
+                KINCAT_CHECK_ERROR(idx_instance == -1, "Error: Did not find valid event!");
                 /// check instance is possible or not
                 const auto idx_variant_output = dictionary._constraints(idx_instance, idx_variant);
 
@@ -210,20 +215,58 @@ ordinal_type SolverSublattice<DT>::advance(const value_type_2d_view<real_type, D
                   /// update lattice configuration
                   Impl::updateLatticeConfiguration(sid, lattice, dictionary, k0, k1, idx_instance, idx_pattern,
                                                    idx_variant, verbose);
-                  Impl::updateEventRates(sid, lattice, dictionary, k0, k1, n_cells_interaction_x, n_cells_interaction_y,
-                                         instance_rates_all, verbose);
+                  //Impl::updateEventRates(sid, lattice, dictionary, k0, k1, n_cells_interaction_x, n_cells_interaction_y,
+                  //                       instance_rates_all, verbose);
 
                   /// update counter
-                  counter.update(sid, idx_instance);
+                  const ordinal_type counterid = d0 + 2*d1*n_domains_y2;
+                  counter.update(sid, counterid, idx_instance);
 
                   /// advance time
                   t_in(d0, d1) += dt;
                 }
+              }); // end single
+
+              member.team_barrier(); // ensure the single has completed
+              
+              // Earlier, we had a call:
+              //
+              //   Impl::updateEventRates(sid, lattice, dictionary, k0, k1, n_cells_interaction_x, n_cells_interaction_y,
+              //                          instance_rates_all, verbose);
+              //
+              // *inside* the single() block.  But this limits our parallelism.  Here, we effectively re-implement
+              // updateEventRates() but with a TeamThreadRange policy.
+              
+              /// range span
+              const ordinal_type idx_begin_x = k0 - n_cells_interaction_x - 1;
+              const ordinal_type idx_end_x   = k0 + n_cells_interaction_x + 1;
+              const ordinal_type idx_begin_y = k1 - n_cells_interaction_y - 1;
+              const ordinal_type idx_end_y = k1 + n_cells_interaction_y + 1;
+              const ordinal_type k0_interxn_cells_x = idx_end_x - idx_begin_x;
+              const ordinal_type k1_interxn_cells_y = idx_end_y - idx_begin_y;
+              const ordinal_type interxn_cells_xy   = k0_interxn_cells_x * k1_interxn_cells_y;
+              const ordinal_type n_cells_x = lattice._n_cells_x;
+              const ordinal_type n_cells_y = lattice._n_cells_y;
+
+
+              Kokkos::parallel_for (Kokkos::TeamThreadRange (member, interxn_cells_xy),
+                                    [&] (int& idx_xy) {
+                ordinal_type k0_arg = (idx_xy / k1_interxn_cells_y) + idx_begin_x;
+                ordinal_type k1_arg = (idx_xy % k1_interxn_cells_y) + idx_begin_y;
+                              
+                lattice.adjustPeriodicBoundary(k0_arg, k1_arg);
+
+                ordinal_type d0_arg, d1_arg, lid_arg;
+
+                lattice.getDomainCellIndex(k0_arg, k1_arg, d0_arg, d1_arg, lid_arg);
+
+                Impl::computeCellRate(sid, lattice, dictionary, k0_arg, k1_arg, instance_rates_all(d0_arg, d1_arg, lid_arg), verbose);
               });
+              member.team_barrier();
             }
           },
           reducer_value);
-      typename DT::execution_space().fence(); // TODO: Check if necessary
+      typename DT::execution_space().fence(); 
       /// check if all subdomains for this color are updated up to t_step -- if so, we are done with the color
       if (n_domains_step == n_domains_4) {
         break;
