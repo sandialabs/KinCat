@@ -173,7 +173,7 @@ ordinal_type SolverBatchRTA<DT>::advance(const value_type_1d_view<real_type, DT>
                                        instance_rates, verbose);
 
                 /// update counter
-                counter.update(sid, idx_instance);
+                counter.update(sid, 0, idx_instance); //currently only uses serial algorithm, so only one domain
 
                 /// advance time
                 t_in(sid) += dt;
