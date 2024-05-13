@@ -14,4 +14,5 @@
 #include "KinCat_Dump.hpp"
 #include "KinCat_Stats.hpp"
 
+#include <chrono>
 #endif
