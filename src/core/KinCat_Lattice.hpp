@@ -38,6 +38,8 @@ public:
   void randomizeSites(const real_type fill, const ordinal_type seed);
   void randomizeSites(const std::vector<real_type> &fill, const ordinal_type seed);
 
+  void readinSites(const value_type_2d_view<site_type, DeviceType> &in_sites,const ordinal_type verbose);
+
   virtual std::ostream &showMe(std::ostream &os, const std::string &label, const ordinal_type verbose = 0) const;
 
   template <typename ArgDeviceType> void copySites(const value_type_2d_view<site_type, ArgDeviceType> &sites) {
@@ -84,8 +86,8 @@ public:
 
   KOKKOS_INLINE_FUNCTION
   void getCellIndex(const ordinal_type k0, const ordinal_type k1, ordinal_type &cid) const {
-    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound");
-    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound");
+    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound, getCellIndex");
+    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound, getCellIndex");
 
     cid = k1 + k0 * (_n_cells_y);
   }
@@ -93,8 +95,8 @@ public:
   KOKKOS_INLINE_FUNCTION
   void getDomainCellIndex(const ordinal_type k0, const ordinal_type k1, ordinal_type &d0, ordinal_type &d1,
                           ordinal_type &lid) const {
-    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound");
-    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound");
+    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound, getDomainCellIndex");
+    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound, getDomainCellIndex");
 
     d0 = k0 / _n_cells_domain_x;
     d1 = k1 / _n_cells_domain_y;
@@ -103,6 +105,7 @@ public:
     const ordinal_type l1 = k1 - d1 * _n_cells_domain_y;
 
     lid = l1 + l0 * (_n_cells_domain_y);
+
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -110,8 +113,8 @@ public:
     k0 = cid / _n_cells_y;
     k1 = cid % _n_cells_y;
 
-    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound");
-    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound");
+    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound, getLatticeCellIndex");
+    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound, getLatticeCellIndex");
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -129,8 +132,8 @@ public:
     k0 = d0 * _n_cells_domain_x + l0;
     k1 = d1 * _n_cells_domain_y + l1;
 
-    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound");
-    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound");
+    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound, getLatticeCellIndex");
+    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound, getLatticeCellIndex");
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -138,8 +141,8 @@ public:
 
   KOKKOS_INLINE_FUNCTION
   void getSiteIndex(const ordinal_type k0, const ordinal_type k1, const ordinal_type ib, ordinal_type &sid) const {
-    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound");
-    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound");
+    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound, getSiteIndex");
+    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound, getSiteIndex");
     KINCAT_DEBUG_CHECK_ERROR(ib < 0 || ib >= _n_basis, "Error: ib is out of bound");
 
     sid = ib + k1 * _n_basis + k0 * (_n_cells_y * _n_basis);
@@ -160,8 +163,8 @@ public:
     }
     ib = val;
 
-    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound");
-    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound");
+    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound, getLatticeIndex");
+    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound, getLatticeIndex");
     KINCAT_DEBUG_CHECK_ERROR(ib < 0 || ib >= _n_basis, "Error: ib is out of bound");
   }
 
@@ -173,8 +176,8 @@ public:
     k1 = k1 < 0 ? _n_cells_y + k1 : k1;
     k1 = k1 >= _n_cells_y ? k1 - _n_cells_y : k1;
 
-    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound");
-    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound");
+    KINCAT_DEBUG_CHECK_ERROR(k0 < 0 || k0 >= _n_cells_x, "Error: k0 is out of bound, adjustPeriodicBoundary");
+    KINCAT_DEBUG_CHECK_ERROR(k1 < 0 || k1 >= _n_cells_y, "Error: k1 is out of bound, adjustPeriodicBoundary");
   }
 
   KOKKOS_INLINE_FUNCTION
