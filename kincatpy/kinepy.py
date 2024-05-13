@@ -1,6 +1,6 @@
 '''
 ======================================================================================
-kincat version 1.0
+kincat version 1.1
 Copyright (2023) NTESS
 https://github.com/sandia/kincat
 Copyright 2023 National Technology & Engineering Solutions of Sandia, LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government retains certain rights in this software.
@@ -33,8 +33,8 @@ from shutil import copyfile
 
 
 # Definition of variables
-version = "1.0"
-date = "01/04/2023"
+version = "1.1"
+date = "05/13/2024"
 tol = 1e-12  # numeric tolerance on the comparisons (machine error)
 tol_strain = 1e-6
 db_displ = 0.0003  #  fictitious displacement of each atom in a dumbbell (in lattice parameter units, with respect to dumbbell center)
@@ -1045,7 +1045,6 @@ def dataset_to_jumps_cat(dataset: dict, crystal: Crystal, symop_list: list, all_
     jump_list = []  # list of all possible jump objects
     jump_symop_ind_list = [] # list of symmetry operations valid for each jump object
     jumpmech2 = (''.join(str(e) + ' ' for e in dataset['procmech'])).split(sep='%%')[1:]  # '%%' symbol separates process mechanisms
-    #print('jumpmech2:',jumpmech2)
     for i in range(len(jumpmech2)-1,-1,-1):  # Checking the number of species for this jump
         tmpcomp = [a.get_species().get_index() for a in component_list] # non-bulk species in cluster
         tmp_component_list=[] #Collects both initial and final species for all constraints.
@@ -1068,24 +1067,19 @@ def dataset_to_jumps_cat(dataset: dict, crystal: Crystal, symop_list: list, all_
         # Check user-input constraints for this jump
         tvec = np.array([0, 0, 0], dtype=float)
         tmplist = []  # temporary constraint list
-        #print('jumpmech3:', jumpmech3)
         for j in range(0, int(jumpmech3[0])):  # Loop on constraints for this jump
             # Check for correct constraint format in input file
-            #print('jumpmech3 slice',jumpmech3[6 + j * 6])
             if jumpmech3[6 + j * 6] != '>':
                 produce_error_and_quit("In dataset_to_jumps - Problem in the format of constraints {} of jump {}".format(j+1, i+1))
             # If everything looks fine, add this constraint to the temporary list
             tmplist.append(jumpmech3[2 + j * 6:8 + j * 6])
-        #print('tmplist:',tmplist)
         jumpmech3 = jumpmech3[0:2] + flat_list(sorted(tmplist, key=lambda x: -int(x[3])))  # sort constraints by species in decreasing order (from highest index to 0)
         # Add constraints to jump object
         for j in range(0, int(jumpmech3[0])):  # Loop on constraints for this jump
             # Initial species and position
             inispec = species_list[int(jumpmech3[5 + j * 6]) - 1]
-            #print('inispec:', inispec.get_name())
             pos_vec = jumpmech3[3 + j * 6:5 + j * 6]
             pos_vec.append('0')
-            #print('inipos', pos_vec)
             inipos = np.array([evalinput(e) for e in pos_vec], dtype=float)
             inipos_nod = np.array([evalinputd0(e) for e in pos_vec], dtype=float)
             if jumpmech3[2 + j * 6] == 'o':  # convert to supercell basis if necessary
@@ -1097,9 +1091,7 @@ def dataset_to_jumps_cat(dataset: dict, crystal: Crystal, symop_list: list, all_
             
             # Final species and position
             finspec = species_list[int(jumpmech3[7 + j * 6]) - 1]
-            #print('finspec:', finspec.get_name())
             finpos = np.array([evalinput(e) for e in pos_vec], dtype=float)
-            #print('finpos', finpos)
             finpos_nod = np.array([evalinputd0(e) for e in pos_vec], dtype=float)
             if jumpmech3[2 + j * 6] == 'o':  # convert to supercell basis if necessary
                 finpos = change_base(arr=finpos, crystal=crystal)
@@ -1114,12 +1106,7 @@ def dataset_to_jumps_cat(dataset: dict, crystal: Crystal, symop_list: list, all_
         # Search and assign defect type and translation to each constraint
         for cons in su_jump_list[i].get_constraints():
             cons.vect2deftrans_constraint(all_defect_list=all_defect_list)
-        # Check that this jump is not symmetrically equivalent to other jumps (but do not remove it!)
-        #for poteq in jump_list:
-        #    if su_jump_list[i] == poteq:
-        #        logger.info("!! Jumps {} and {} are symmetrically equivalent.".format(str(i), str(poteq.get_index())))
-        #        logger.info("Ignore for now. Likely not symmetrically equivalent, just due to altered event mechanism input format.")
-        
+       
         tmp_jump_list, jump_symop_ind=su_jump_list[i].find_symeqs(symops=symop_list, all_defect_list=all_defect_list, addreverse=False ,symop_ind=True)
         jump_list += tmp_jump_list
         jump_symop_ind_list.append(jump_symop_ind)
@@ -1249,6 +1236,7 @@ def dataset_to_jumps_cat(dataset: dict, crystal: Crystal, symop_list: list, all_
                         duplicate_jumps.append([j,k]) # j is 1st jump, k is duplicate jump to be removed
         
         duplicate_jumps = dupe_sort(duplicate_jumps) #Sort to ensure that jumps to be removed are in increasing order
+
         for i in range(len(duplicate_jumps)):
             jump_to_remove = duplicate_jumps[len(duplicate_jumps)-i-1][1]
             jump_list.remove(jump_list[jump_to_remove])
@@ -1299,7 +1287,6 @@ def dataset_to_species(dataset: dict, defect_list: list, doubledefects: list = [
         # Create adequate number of components for each species
         for j in range(0, int(dataset['species'][i * (3 + n_defects) + 1])):
             component_list.append(Component(species=species_list[i], index=n_components))
-            #component_list[n_components].get_info()
             n_components += 1
 
     # Create bulk (matrix) species (for jump constraints)
@@ -1343,7 +1330,10 @@ def find_symmetry_operations(crystal: Crystal) -> list:
                 for j in range(1, 7):  # check if 6-idempotent
                     Nmat2 = np.linalg.matrix_power(Nmat, j)    # Nmat2 = np.matrix(Nmat) ** j
                     if are_equal_arrays(Nmat2, np.identity(3)):
-                        build_unitary_matrices.symop_list.append(SymOp(rotation=Nmat))  # Store found matrix
+                        if are_equal_arrays(Nmat, np.identity(3)):
+                            build_unitary_matrices.symop_list.insert(0, SymOp(rotation=Nmat))
+                        else:
+                            build_unitary_matrices.symop_list.append(SymOp(rotation=Nmat))  # Store found matrix
 
     # Here the build_unitary_matrices recursive function is called
     build_unitary_matrices.symop_list = []  # initialization of the symop_list as function attribute, which is updated inside the function
@@ -1436,7 +1426,6 @@ def find_symmetry_operations(crystal: Crystal) -> list:
 
                 if are_equal_arrays(np.array(temp_array3), basis):
                     found = True
-                    #print("found")
                     if symop_list[idx].get_translation() is None:
                         symop_list[idx].set_translation(trans)
 
@@ -1457,7 +1446,6 @@ def find_symmetry_operations(crystal: Crystal) -> list:
             PGop += 1
             symop_list[idx].set_translation(np.array([0,0,0]))
     logger.info("  Found {} symmetry operations ({} point group op. and {} space groups op.)".format(len(symop_list),PGop,SGop))
-    #print("  Found {} symmetry operations ({} point group op. and {} space groups op.)".format(len(symop_list),PGop,SGop))
     return symop_list
 
 
@@ -1494,7 +1482,7 @@ def name2conf(name: str, all_defect_list: list, species: list) -> Configuration:
 
 
 def confsites(event_coords: list, kira: float, crystal: Crystal, species: list)->list: #Finds all permutations of species on lattice, saves them in config_list
-    n = int(10) #estimate of maximum range needed to explore lattice.
+    n = int(20) #estimate of maximum range needed to explore lattice.
     limitp = [n, n, 0]
     limitm = [-n, -n, 0]
     coords_list=[]
@@ -1505,9 +1493,10 @@ def confsites(event_coords: list, kira: float, crystal: Crystal, species: list)-
                 tmp_coord=bulk[1:4]+trans
                 for coord in event_coords:
                     if distance(tmp_coord,np.array(coord),crystal=crystal)<=kira:
+                        #print("New Coord in range : ", tmp_coord)
+                        #print("Event Coord and Dist : ", coord , ", ", distance(tmp_coord,np.array(coord),crystal=crystal))
                         coords_list.append(bulk[1:4]+trans)
                         break
-    #print("found ",len(coords_list),"lattice sites within range") #Need to check how sublattices/basis atoms work
     return coords_list
 
 
@@ -1690,6 +1679,7 @@ def config_sym_define(coords_list: list, symop_list: list) -> list:
 
     n_symops=len(symop_list)
     rotated_coords_lists=apply_symmetry_operations(vector_list=list_coords, symop_list=symop_list, unique=False)
+    
     for i in range(n_symops):
         com_=[0,0,0]
         for j in range(n_coords): #calculate 'center of mass' for rotated coordinates
@@ -1733,21 +1723,21 @@ def config_sym_define(coords_list: list, symop_list: list) -> list:
 
     return config_symops, symop_relations
 
-def sym_config_add_unique(ini_species_ind:list, config_template: CatConfTemplate, config_dict: dict, config_species_lists: list) -> None:
+def sym_config_add_unique(ini_species_ind:list, config_template: CatConfTemplate, config_dict: list, config_species_lists: list, seti: int) -> None:
     symmetry_orders=config_template.get_relations()
     sym_list=[]
     flag= True
-    config_index=len(config_dict)
+    config_index=len(config_dict[seti])
     for i in range(len(symmetry_orders)):
         sym_species=[ini_species_ind[j] for j in symmetry_orders[i]]
         sym_list.append(sym_species)
-        if (flag and (test_config(sym_species,config_dict))):
+        if (flag and (test_config(sym_species,config_dict[seti]))):
             flag=False
             break
 
     if flag: #Unique, so add to dictionary and list. 
-        config_dict.update({np.array_str(np.array(sym_list[0])):str(config_index)}) #adding first of symmetry variants to dictionary. 
-        config_species_lists.append(sym_list[0])
+        config_dict[seti].update({np.array_str(np.array(sym_list[0])):str(config_index)}) #adding first of symmetry variants to dictionary. 
+        config_species_lists[seti].append(sym_list[0])
 
 
 def test_config(test_conf,config_dict):
@@ -1819,13 +1809,14 @@ def find_all_events(allevents:list, config_species_lists:list, config_template: 
                         full_event_list.append(unique_event)
     return full_event_list
 
-def config_event_def(coords_list: list, jump_list: list) -> list:
+def config_event_def(coords_list: list, jump_list: list, jump_set_list: list) -> list:
     #translates each event mechanism and related constraints into a set of constraints defined in terms of configuration site indicies.
     config_coords_dict={}
     for i,cord in enumerate(coords_list):
         config_coords_dict.update({np.array_str(np.array(cord)):str(i)})
     config_jump_list=[]
-    for event in jump_list:
+    for i in jump_set_list:
+        event = jump_list[i]
         config_cons=[]
         for cons in event.get_constraints():
             ini_ind=int(config_coords_dict[np.array_str(np.array(cons.get_iniposition()))])
@@ -1931,13 +1922,59 @@ def sortcoordsinternal(coords:list) -> list:
         new_coords.append(sort_array[b_int])
     return new_coords
 
-def find_event_coords(jump_list:list) -> list: #finds all unique coordinates changed by any process/jump
-    event_coords = []
+def find_event_coords_sets(jump_list:list) -> list: #finds sets of unique coordinates changed by a process/jump
+    event_coords_sets = [[]]
+    jump_list_sets = [[]]
     n_jumps = len(jump_list)
     for event in range(n_jumps):
         cons = jump_list[event].get_constraints()
+        cord_check = []
         for con in range(len(cons)):
             #Assuming that initial and final positions are the same, All events coordinates described in terms of transmutations at those sites. 
+            if cons[con].get_inispecies().get_name()!=cons[con].get_finspecies().get_name():
+                cord_check.append(cons[con].get_iniposition()) 
+        if len(cons) > 1: #need to sort, convert to lists so will sort. Convert back to arrays for matching
+            cord_checklist = []
+            for cord in range(len(cord_check)):
+                cord_checklist.append(cord_check[cord].tolist())
+            cord_checklist = sortcoords(cord_checklist)
+            for cord in range(len(cord_check)):
+                cord_check[cord] = np.array(cord_checklist[cord])
+
+        if event == 0:
+            event_coords_sets[0] = cord_check
+            jump_list_sets[0] = [event]
+            continue
+        found_flag = False
+        for seti in range(len(event_coords_sets)):
+            match_flag = True
+            if len(event_coords_sets[seti]) == len(cord_check):
+                for coord in range(len(event_coords_sets[seti])):
+                    if not are_equal_arrays(event_coords_sets[seti][coord], cord_check[coord]):
+                        match_flag = False 
+                        break
+            else:
+                continue
+
+            if match_flag == True:
+                found_flag = True
+                jump_list_sets[seti].append(event)
+                break
+
+        if not found_flag:
+            event_coords_sets.append(cord_check)
+            jump_list_sets.append([event])
+
+    return event_coords_sets, jump_list_sets
+
+def find_event_coords(jump_list:list) -> list: #finds all unique coordinates changed by any process/jump
+    event_coords = []
+    n_jumps = len(jump_list)
+    print("Searching ", n_jumps, " jumps")
+    for event in range(n_jumps):
+        cons = jump_list[event].get_constraints()
+        for con in range(len(cons)):
+            #Assuming that initial and final positions(coordinates) are the same, All events coordinates described in terms of transmutations at those sites. 
             if cons[con].get_inispecies().get_name()!=cons[con].get_finspecies().get_name():
                 cord_check = []
                 cord_check.append(cons[con].get_iniposition()) 
@@ -1951,7 +1988,8 @@ def find_event_coords(jump_list:list) -> list: #finds all unique coordinates cha
                            break
                     if not found_flag:
                         event_coords.append(cord_check[k])
-    #print("found ",len(event_coords), "event coordinates")
+                        print("adding coord [",cord_check[k] ,"] for jump ", event, "called ", jump_list[event].get_name())
+
     return event_coords
 
 def index_round(x:float) -> int:
