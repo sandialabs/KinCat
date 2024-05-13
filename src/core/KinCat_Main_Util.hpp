@@ -130,8 +130,11 @@ ordinal_type parseDictionaryInput(
     value_type_2d_view<real_type, device_type> &basis_vectors_view,
     value_type_2d_view<real_type, device_type> &symmetry_operations_view,
     value_type_2d_view<real_type, device_type> &site_coordinates_view, ordinal_type &n_species,
-    value_type_2d_view<ordinal_type, device_type> &variant_orderings_view, ordinal_type &n_cells_interaction_x,
-    ordinal_type &n_cells_interaction_y, value_type_2d_view<site_type, device_type> &configurations_view,
+    value_type_2d_view<ordinal_type, device_type> &variant_orderings_view, 
+    value_type_2d_view<ordinal_type, device_type> &symmetry_orderings_view,
+    ordinal_type &n_cells_interaction_x, ordinal_type &n_cells_interaction_y, 
+    value_type_2d_view<site_type, device_type> &configurations_view,
+    value_type_1d_view<ordinal_type, device_type> &configuration_sets,
     value_type_2d_view<ordinal_type, device_type> &instances_view,
     value_type_2d_view<ordinal_type, device_type> &constraints_view,
     value_type_2d_view<ordinal_type, device_type> &process_symmetries_view, std::vector<std::string> &processes,
@@ -143,6 +146,7 @@ ordinal_type parseRatesInput(const boost::json::object &root, const std::vector<
                              const value_type_2d_view<ordinal_type, device_type> &instances_view,
                              value_type_2d_view<real_type, device_type> &rates_view, const ordinal_type verbose = 0);
 ordinal_type sortAndRemapDictionary(const value_type_2d_view<site_type, device_type> &configurations_view,
+                                    const value_type_1d_view<ordinal_type, device_type> &configuration_sets_view,
                                     const value_type_2d_view<ordinal_type, device_type> &instances_view,
                                     const value_type_2d_view<ordinal_type, device_type> &constraints_view,
                                     const value_type_2d_view<real_type, device_type> &rates_view,
@@ -152,7 +156,7 @@ ordinal_type validateSitesInput(const boost::json::value &tree, boost::json::obj
                                 const ordinal_type verbose = 0);
 ordinal_type parseSitesInput(const boost::json::object &root, std::string &site_init_type, ordinal_type &n_cells_x,
                              ordinal_type &n_cells_y, ordinal_type &n_basis, real_type &random_fill_ratio,
-                             value_type_2d_view<site_type, device_type> &sites_view, real_type &t_sites,
+                             value_type_2d_view<site_type, device_type> &sites_view, value_type_1d_view< real_type, device_type> &t_sites,
                              const ordinal_type verbose = 0);
 ordinal_type validateDumpInput(const boost::json::value &tree, boost::json::object &root,
                                const ordinal_type verbose = 0);
@@ -184,7 +188,9 @@ public:
   /// this include empty site as species zero
   ordinal_type _n_species;
   value_type_2d_view<ordinal_type, device_type> _variant_orderings;
+  value_type_2d_view<ordinal_type, device_type> _symmetry_orderings;
   value_type_2d_view<site_type, device_type> _configurations;
+  value_type_1d_view<ordinal_type, device_type> _configuration_sets;
   value_type_2d_view<ordinal_type, device_type> _processints;
   value_type_2d_view<ordinal_type, device_type> _constraints;
   value_type_2d_view<ordinal_type, device_type> _process_symmetries;
@@ -204,14 +210,15 @@ public:
 
   /// random sites
   ordinal_type _site_random_seed;
-  real_type _site_random_fill_ratio;
+  std::vector<real_type> _site_random_fill_ratio;
 
   /// sites from a file
-  real_type _t_sites;
+  value_type_1d_view<real_type, device_type> _t_sites;
   value_type_2d_view<site_type, device_type> _sites;
 
   // dump
   std::string _dump_filename;
+  std::string _restart_save_filename;
   real_type _dump_interval;
 
   /// statistics
