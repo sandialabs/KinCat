@@ -91,16 +91,6 @@ void Lattice<DT>::createNeighborPattern(const value_type_2d_view<real_type, DT> 
            std::function<bool(const pattern_key_type &, const pattern_key_type &)>>
       pattern_map(compare_pattern_key);
 
-  /// self contribution (not needed)
-  // {
-  //   pattern_key_type key;
-  //   for (ordinal_type i = 0, iend = site_coordinates_host.extent(0); i < iend; ++i) {
-  //     key[i * 2 + 0] = site_coordinates_host(i, 0);
-  //     key[i * 2 + 1] = site_coordinates_host(i, 1);
-  //   }
-  //   ++pattern_map[key];
-  // }
-
   /// rotate site coordinates
   for (ordinal_type j = 0, jend = symmetry_operations_host.extent(0); j < jend; ++j) {
     /// wrap the 1d array with 2x2 matrix
@@ -149,6 +139,7 @@ void Lattice<DT>::createNeighborPattern(const value_type_2d_view<real_type, DT> 
                          "Error: symmetry2pattern initialization is failed (input is not consistent)");
     }
   }
+  Kokkos::deep_copy(_symmetry2pattern, symmetry2pattern_host);
 
   if (verbose > 2) {
     std::cout << "  -- Symmetry2Pattern\n";
@@ -231,14 +222,20 @@ template <typename DT> void Lattice<DT>::randomizeSites(const real_type fill, co
 }
 
 template <typename DT> void Lattice<DT>::randomizeSites(const std::vector<real_type> &fill, const ordinal_type seed) {
+  // Instantiates configuration based on random distribution of species in specific fill ratios.
+  // Does not consider site permissions, could lead to configurations not allowed and not in dictionary. 
   const auto sites = _sites;
-
-  KINCAT_CHECK_ERROR(fill.size() != sites.extent(0), "Error: fill vector size does not match to sites extent(0)");
-  Kokkos::deep_copy(sites, site_type(0));
-  Kokkos::Random_XorShift64_Pool<DT> random(seed);
-
   const ordinal_type n_samples = sites.extent(0);
   const ordinal_type n_sites = sites.extent(1);
+  const ordinal_type n_species = _n_species - 1;
+    if (n_samples == 1) {
+    KINCAT_CHECK_ERROR(fill.size() != (n_species), "Error: fill vector size does not match to the number of species");
+  } else {
+    KINCAT_CHECK_ERROR(fill.size() != (n_species * n_samples),
+                       "Error: fill vector size does not match to the number of species and samples");
+  }
+  Kokkos::deep_copy(sites, site_type(0));
+  Kokkos::Random_XorShift64_Pool<DT> random(seed);
 
   value_type_2d_view<ordinal_type, DT> site_locations(do_not_init_tag("site locations"), n_samples, n_sites);
   {
@@ -255,18 +252,19 @@ template <typename DT> void Lattice<DT>::randomizeSites(const std::vector<real_t
     Kokkos::deep_copy(site_locations, site_locations_host);
   }
 
-  value_type_1d_view<real_type, DT> fill_ratio(do_not_init_tag("fill ratio"), fill.size());
+  value_type_2d_view<real_type, DT> fill_ratio(do_not_init_tag("fill ratio"), n_samples, n_species);
   {
     const auto fill_ratio_host = Kokkos::create_mirror_view(host_device_type(), fill_ratio);
-    for (ordinal_type i = 0, iend = fill_ratio_host.extent(0); i < iend; ++i)
-      fill_ratio_host(i) = fill[i];
+    real_type running_fill;
+    for (ordinal_type i = 0, iend = fill_ratio_host.extent(0); i < iend; ++i) {
+      running_fill = 0.0;
+      for (ordinal_type j = 0; j < n_species; ++j) {
+        fill_ratio_host(i, j) = fill[i * (n_species) + j];
+        running_fill += fill_ratio_host(i, j);
+      }
+      KINCAT_CHECK_ERROR((running_fill > 1.0), "Sample fill ratios sum to more than 1.")
+    }
     Kokkos::deep_copy(fill_ratio, fill_ratio_host);
-  }
-
-  value_type_2d_view<site_type, DT> site_species(do_not_init_tag("site species"), n_samples, n_sites);
-  {
-    const site_type aa = 1, bb = _n_species;
-    Kokkos::fill_random(site_species, random, aa, bb); // site_type(1), site_type(_n_species));
   }
 
   using range_policy_type = Kokkos::RangePolicy<typename DT::execution_space>;
@@ -274,9 +272,48 @@ template <typename DT> void Lattice<DT>::randomizeSites(const std::vector<real_t
   Kokkos::parallel_for(
       policy, KOKKOS_LAMBDA(const ordinal_type ij) {
         const ordinal_type i = ij / n_sites, j = ij % n_sites;
-        if (j < n_sites * fill_ratio(i))
-          sites(i, site_locations(i, j)) = site_species(i, j);
+        ordinal_type site_start = 0;
+        ordinal_type site_end = 0;
+        for (int k = 1; k <= n_species; k++) {
+          site_end = site_start + fill_ratio(i, k - 1) * n_sites;
+          if ((j >= site_start) && (j < site_end)) {
+            sites(i, site_locations(i, j)) = k;
+          }
+          site_start = site_end;
+        }
       });
+}
+
+template <typename DT> void Lattice<DT>::readinSites(const value_type_2d_view<site_type, DT> &in_sites, const ordinal_type verbose) {
+  //Written so that if single sample is read in, all samples are initialized with the same lattice.
+  const FunctionScope func_scope("Lattice::readinSites", __FILE__, __LINE__, verbose);
+
+  const auto sites = _sites;
+  const ordinal_type n_samples = sites.extent(0);
+  const ordinal_type n_sites = sites.extent(1);
+  //Currently don't check if the species read-in are in the model. 
+  const ordinal_type n_samples_in = in_sites.extent(1)/n_sites;
+
+  KINCAT_CHECK_ERROR(((n_samples!=n_samples_in) && (n_samples_in!=1)), "Error: Number of read-in input samples does not match current ensemble.")
+
+  Kokkos::deep_copy(sites, site_type(-1));
+  const auto sites_host = Kokkos::create_mirror_view_and_copy(host_device_type(), sites);
+  const auto in_sites_host = Kokkos::create_mirror_view_and_copy(host_device_type(), in_sites);
+
+  if (n_samples_in == 1) {
+    for (ordinal_type i = 0, iend = n_samples; i < iend; i++) {
+      for (ordinal_type j = 0, jend = n_sites; j < jend; j++) {
+        sites_host(i, j) = in_sites_host(0,j);
+      } 
+    }
+  } else {
+    for (ordinal_type i = 0, iend = n_samples; i < iend; i++) {
+      for (ordinal_type j = 0, jend = n_sites; j < jend; j++) {
+        sites_host(i, j) = in_sites_host(0,(i*n_sites)+j);
+      }
+    }
+  }
+  Kokkos::deep_copy(_sites, sites_host);
 }
 
 template <typename DT>
