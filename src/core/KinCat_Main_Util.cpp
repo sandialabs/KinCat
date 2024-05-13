@@ -107,11 +107,13 @@ ordinal_type validateDictionaryInput(const boost::json::value &jv, boost::json::
         KINCAT_CHECK_ERROR(configuration_obj.find("variant orderings") == configuration_obj.end(),
                            "Error: [variant orderings] key does not exist in configuration object");
         KINCAT_CHECK_ERROR(configuration_obj.find("interaction range") == configuration_obj.end(),
-                           "Error: [interaction range] key does not exist in symmetry operation object");
+                           "Error: [interaction range] key does not exist in configuration object");
         KINCAT_CHECK_ERROR(configuration_obj.find("shape") == configuration_obj.end(),
-                           "Error: [shape] key does not exist in symmetry operation object");
+                           "Error: [shape] key does not exist in configuration object");
         KINCAT_CHECK_ERROR(configuration_obj.find("data") == configuration_obj.end(),
-                           "Error: [data] key does not exist in symmetry operation object");
+                           "Error: [data] key does not exist in configuration object");
+        KINCAT_CHECK_ERROR(configuration_obj.find("configuration_sets") == configuration_obj.end(), 
+                           "Error: [configuration_sets] key does not exist in configuration object")
       }
     }
 
@@ -147,8 +149,11 @@ ordinal_type parseDictionaryInput(
     value_type_2d_view<real_type, device_type> &basis_vectors_view,
     value_type_2d_view<real_type, device_type> &symmetry_operations_view,
     value_type_2d_view<real_type, device_type> &site_coordinates_view, ordinal_type &n_species,
-    value_type_2d_view<ordinal_type, device_type> &variant_orderings_view, ordinal_type &n_cells_interaction_x,
+    value_type_2d_view<ordinal_type, device_type> &variant_orderings_view, 
+    value_type_2d_view<ordinal_type, device_type> &symmetry_orderings_view,
+    ordinal_type &n_cells_interaction_x,
     ordinal_type &n_cells_interaction_y, value_type_2d_view<site_type, device_type> &configurations_view,
+    value_type_1d_view<ordinal_type, device_type> &configuration_sets_view,
     value_type_2d_view<ordinal_type, device_type> &processints_view,
     value_type_2d_view<ordinal_type, device_type> &constraints_view,
     value_type_2d_view<ordinal_type, device_type> &process_symmetries_view, std::vector<std::string> &processes,
@@ -162,8 +167,10 @@ ordinal_type parseDictionaryInput(
 
   std::vector<std::vector<real_type>> site_coordinates;
   std::vector<std::vector<ordinal_type>> variant_orderings;
+  std::vector<std::vector<ordinal_type>> symmetry_orderings;
   std::vector<ordinal_type> configuration_shape;
   std::vector<ordinal_type> configuration_data;
+  std::vector<ordinal_type> configuration_sets;
 
   std::vector<std::vector<ordinal_type>> process_symmetries;
   processes.clear();
@@ -216,7 +223,30 @@ ordinal_type parseDictionaryInput(
         boost::json::value_to<std::vector<ordinal_type>>(configuration_obj.find("interaction range")->value());
     n_cells_interaction_x = tmp[0];
     n_cells_interaction_y = tmp[1];
+    configuration_sets = boost::json::value_to<std::vector<ordinal_type>>(configuration_obj.find("configuration_sets")->value());
+    ordinal_type n_sets = configuration_sets.size() - 1;
+    std::vector<std::vector<ordinal_type>> symmetry_orderings_tmp;
+    std::vector<ordinal_type> temp3;
+    for (ordinal_type p = 0; p < variant_orderings.size(); p++) {
+      symmetry_orderings.push_back(temp3);
+    }
+    const auto orderings_it = configuration_obj.find("symmetry orderings");
+    if (orderings_it == configuration_obj.end()) {
+      std::cout << "Cant find symmetry orderings\n";
+    }
+    const auto symmetry_orderings_obj = orderings_it->value().as_object();
+    
+    for (ordinal_type i = 0; i < n_sets; ++i) {
+      symmetry_orderings_tmp = boost::json::value_to<std::vector<std::vector<ordinal_type>>>(
+        symmetry_orderings_obj.find(std::to_string(i))->value());
+      for (ordinal_type p = 0; p < symmetry_orderings_tmp.size(); p++) {
+        for (ordinal_type j = 0; j < symmetry_orderings_tmp[0].size(); j++) {
+          symmetry_orderings[p].push_back(symmetry_orderings_tmp[p][j]);
+        }
+      }
+    }
     r_val = KinCat::parseArrayObject(configuration_obj, configuration_shape, configuration_data);
+    
     {
       const auto it = std::max_element(configuration_data.begin(), configuration_data.end());
       n_species = *it + 1;
@@ -239,6 +269,19 @@ ordinal_type parseDictionaryInput(
         std::cout << "]\n";
       }
       std::cout << "\n";
+      std::cout << "symmetry orderings : " << symmetry_orderings.size() << "\n";
+      for (ordinal_type i = 0, iend = symmetry_orderings.size(); i < iend; ++i) {
+        std::cout << "  [" << symmetry_orderings[i][0];
+        for (ordinal_type j = 1, jend = symmetry_orderings[i].size(); j < jend; ++j)
+          std::cout << ", " << symmetry_orderings[i][j];
+        std::cout << "]\n";
+      }
+      std::cout << "\n";
+      std::cout << "configuration sets : [ " << configuration_sets[0];
+      for (ordinal_type i = 1, iend = configuration_sets.size(); i < iend; i++) {
+        std::cout << ", " << configuration_sets[i];
+      }
+      std::cout << " ]\n";
       std::cout << "configuration list : (" << configuration_shape[0] << ", " << configuration_shape[1] << ")\n";
       for (ordinal_type i = 0, iend = configuration_shape[0]; i < iend; ++i) {
         const ordinal_type offs = i * configuration_shape[1];
@@ -308,6 +351,7 @@ ordinal_type parseDictionaryInput(
         std::cout << " ] ]\n";
       }
     }
+
     KINCAT_CHECK_ERROR(processes.size() != process_constraints.size(),
                        "Error: processes size does not match to process constraints");
 
@@ -350,12 +394,24 @@ ordinal_type parseDictionaryInput(
   copyStdVectorToKokkosView(variant_orderings, variant_orderings_host_view);
   Kokkos::deep_copy(variant_orderings_view, variant_orderings_host_view);
 
+  /// symmetry orderings view
+  symmetry_orderings_view = value_type_2d_view<ordinal_type, device_type>(
+    do_not_init_tag("symmetry orderings"), symmetry_orderings.size(), symmetry_orderings[0].size()); 
+  auto symmetry_orderings_host_view = Kokkos::create_mirror_view(host_device_type(), symmetry_orderings_view);
+  copyStdVectorToKokkosView(symmetry_orderings, symmetry_orderings_host_view);
+  Kokkos::deep_copy(symmetry_orderings_view, symmetry_orderings_host_view);
+
   /// configuration and instance view
   configurations_view = value_type_2d_view<site_type, device_type>(do_not_init_tag("configurations"),
                                                                    configuration_shape[0], configuration_shape[1]);
   auto configurations_host_view = Kokkos::create_mirror_view(host_device_type(), configurations_view);
   copyStdVectorToKokkosView(configuration_shape, configuration_data, configurations_host_view);
   Kokkos::deep_copy(configurations_view, configurations_host_view);
+  
+  configuration_sets_view = value_type_1d_view<ordinal_type, device_type>(do_not_init_tag("configuration_sets"), configuration_sets.size());
+  auto configuration_sets_host_view = Kokkos::create_mirror_view(host_device_type(), configuration_sets_view);
+  copyStdVectorToKokkosView(configuration_sets, configuration_sets_host_view);
+  Kokkos::deep_copy(configuration_sets_view, configuration_sets_host_view);
 
   processints_view = value_type_2d_view<ordinal_type, device_type>(do_not_init_tag("instances"), processints_shape[0],
                                                                    processints_shape[1]);
@@ -474,14 +530,6 @@ ordinal_type validateOverrideInput(const boost::json::value &jv, boost::json::ob
 
   try {
     const boost::json::object &root = jv.as_object();
-    //{
-    //  const auto it = tree.find("processes");
-    //  if (it == tree.end()) {
-    //    root = tree;
-    //  } else {
-    //    root = it->value().as_object();
-    //  }
-    //}
     {
       const auto proc_it = root.find("processes");
       if (proc_it == root.end()) {
@@ -499,7 +547,7 @@ ordinal_type validateOverrideInput(const boost::json::value &jv, boost::json::ob
             boost::json::value_to<std::vector<real_type>>(proc_rates_root.find(std::to_string(rate_idx))->value());
         const auto n_samp_it = root.find("number of samples");
         if (n_samp_it == root.end()) {
-          std::cout << "Problem!!!\n";
+          std::cout << "Failed to find the number of samples\n";
         }
         ordinal_type n_samp = boost::json::value_to<ordinal_type>(n_samp_it->value());
       }
@@ -563,7 +611,7 @@ ordinal_type parseRatesInput(const boost::json::object &root, const std::vector<
   auto rates_view_host = Kokkos::create_mirror_view(host_device_type(), rates_view);
 
   try {
-    ordinal_type r_val(0);
+    //ordinal_type r_val(0);
     default_rate = boost::json::value_to<real_type>(root.find("default rate")->value());
 
     if (verbose > 2) {
@@ -648,6 +696,7 @@ ordinal_type parseRatesInput(const boost::json::object &root, const std::vector<
     }
 
   } catch (const std::exception &e) {
+    std::cout << "Execption " << __LINE__ << '\n';
     std::cerr << "Error: exception is caught parsing json input rates file\n" << e.what() << "\n";
   }
 
@@ -657,16 +706,28 @@ ordinal_type parseRatesInput(const boost::json::object &root, const std::vector<
 }
 
 ordinal_type sortAndRemapDictionary(const value_type_2d_view<site_type, device_type> &configurations_view,
+                                    const value_type_1d_view<ordinal_type, device_type> &configuration_sets_view,
                                     const value_type_2d_view<ordinal_type, device_type> &processints_view,
                                     const value_type_2d_view<ordinal_type, device_type> &constraints_view,
                                     const value_type_2d_view<real_type, device_type> &rates_view,
                                     const ordinal_type verbose) {
   auto configurations_host_view = Kokkos::create_mirror_view_and_copy(host_device_type(), configurations_view);
+  auto configuration_sets_host_view = Kokkos::create_mirror_view_and_copy(host_device_type(), configuration_sets_view);
   std::vector<ordinal_type> idx_configurations, inverse_idx_configurations;
+  std::vector<ordinal_type> idx_sets;
+  std::vector<ordinal_type> idx_sets_configurations;
   {
     idx_configurations.resize(configurations_host_view.extent(0));
     std::iota(idx_configurations.begin(), idx_configurations.end(), 0);
-    std::sort(idx_configurations.begin(), idx_configurations.end(),
+    ordinal_type n_configs = configuration_sets_view.extent(0) - 1;
+    
+    for (ordinal_type seti = 0; seti < n_configs; seti++) {
+      idx_sets.clear();
+      for (ordinal_type i = ordinal_type(configuration_sets_host_view(seti)); i < ordinal_type(configuration_sets_host_view(seti+1)); i++) {
+        idx_sets.push_back(idx_configurations[i]);
+      }
+
+      std::sort(idx_sets.begin(), idx_sets.end(),
               [&configurations_host_view](ordinal_type a, ordinal_type b) {
                 for (ordinal_type i = 0, iend = configurations_host_view.extent(1); i < iend; ++i) {
                   if (configurations_host_view(a, i) == configurations_host_view(b, i))
@@ -675,10 +736,14 @@ ordinal_type sortAndRemapDictionary(const value_type_2d_view<site_type, device_t
                 }
                 return false;
               });
-    permute(idx_configurations, configurations_host_view);
+      for (ordinal_type i = 0; i < idx_sets.size(); i++) {
+        idx_sets_configurations.push_back(idx_sets[i]);
+      }
+    }
+    permute(idx_sets_configurations, configurations_host_view);
     inverse_idx_configurations.resize(configurations_host_view.extent(0));
     for (ordinal_type i = 0, iend = inverse_idx_configurations.size(); i < iend; ++i) {
-      inverse_idx_configurations[idx_configurations[i]] = i;
+      inverse_idx_configurations[idx_sets_configurations[i]] = i;
     }
   }
   Kokkos::deep_copy(configurations_view, configurations_host_view);
@@ -769,13 +834,12 @@ ordinal_type validateSitesInput(const boost::json::value &jv, boost::json::objec
 }
 
 ordinal_type parseSitesInput(const boost::json::object &root, std::string &site_init_type, ordinal_type &n_cells_x,
-                             ordinal_type &n_cells_y, ordinal_type &n_basis, real_type &site_random_fill_ratio,
+                             ordinal_type &n_cells_y, ordinal_type &n_basis, std::vector<real_type> &site_random_fill_ratio,
                              ordinal_type &site_random_seed, value_type_2d_view<site_type, device_type> &sites_view,
-                             real_type &t_sites, const ordinal_type verbose) {
+                             value_type_1d_view<real_type, device_type> &t_sites, const ordinal_type verbose) {
   const FunctionScope func_scope("parseSitesInput", __FILE__, __LINE__, verbose);
-
   /// parse data
-  real_type default_rate;
+  //real_type default_rate;
   std::string type_string;
   std::vector<real_type> rates_data;
 
@@ -789,10 +853,9 @@ ordinal_type parseSitesInput(const boost::json::object &root, std::string &site_
       n_basis = tmp[2];
     }
 
-    t_sites = 0;
     site_init_type = boost::json::value_to<std::string>(root.find("type")->value());
     if (site_init_type == "random") {
-      site_random_fill_ratio = boost::json::value_to<real_type>(root.find("random fill ratio")->value());
+      site_random_fill_ratio = boost::json::value_to<std::vector<real_type>>(root.find("random fill ratio")->value());
       site_random_seed = boost::json::value_to<ordinal_type>(root.find("random seed")->value());
     } else if (site_init_type == "file") {
       boost::json::object sites_root;
@@ -800,8 +863,8 @@ ordinal_type parseSitesInput(const boost::json::object &root, std::string &site_
         const std::string filename =
             replaceEnvironmentVariable(boost::json::value_to<std::string>(root.find("filename")->value()));
         boost::json::value jv;
+        std::cout.flush();
         r_val = parseInputfile(filename, jv, verbose);
-
         const boost::json::object &tree = jv.as_object();
         const auto it = tree.find("sites");
         if (it == tree.end()) {
@@ -810,23 +873,55 @@ ordinal_type parseSitesInput(const boost::json::object &root, std::string &site_
           sites_root = it->value().as_object();
         }
       }
+      //Check for number of samples in file
+      ordinal_type n_samples_in = 0;
+      ordinal_type batch_size_max = 100000; //This is intended to be far larger than any batch actually run. Will cause an error if matched. 
+      for (ordinal_type i = 0, iend = batch_size_max; i < iend; i++) {
+        const auto it = sites_root.find(std::to_string(i));
+        if (it == sites_root.end()) {
+          n_samples_in = i;
+          break;
+        } 
+      }
+      KINCAT_CHECK_ERROR((n_samples_in == 0), "WARNING:: Did not find samples in sites read-in file. Could be incorrect format.\n");
+      t_sites = value_type_1d_view<real_type, device_type>(do_not_init_tag("t_sites"), n_samples_in);
+      auto t_sites_host_view = Kokkos::create_mirror_view(host_device_type(), t_sites);
       sites_view =
-          value_type_2d_view<site_type, device_type>(do_not_init_tag("sites"), 1, n_cells_x * n_cells_y * n_basis);
+          value_type_2d_view<site_type, device_type>(do_not_init_tag("sites"), 1, n_cells_x * n_cells_y * n_basis * n_samples_in);
       const auto sites_host_view = Kokkos::create_mirror_view(host_device_type(), sites_view);
-
-      /// open file and read it
-      t_sites = boost::json::value_to<real_type>(sites_root.find("time")->value());
+      
+      auto it = sites_root.find(std::to_string(0));
+      boost::json::object sample_obj = it->value().as_object();
+      real_type t_tmp = boost::json::value_to<real_type>(sample_obj.find("time")->value());
       std::vector<ordinal_type> tmp =
-          boost::json::value_to<std::vector<ordinal_type>>(sites_root.find("data")->value());
-      KINCAT_CHECK_ERROR(sites_host_view.extent(1) != tmp.size(),
-                         "Error: sites file does not match to lattice information");
+        boost::json::value_to<std::vector<ordinal_type>>(sample_obj.find("data")->value());
+      KINCAT_CHECK_ERROR((tmp.size() != (n_cells_x * n_cells_y * n_basis)), "Error: sites file sample does not match to lattice information");
+      std::vector<ordinal_type> complete_tmp = tmp;
+      std::vector<real_type> t_sites_vector ;
+      t_sites_vector.push_back(t_tmp);
+
+      for (ordinal_type i = 1; i < n_samples_in; i++) {
+        const auto it = sites_root.find(std::to_string(i));
+        sample_obj = it->value().as_object();
+        real_type t_tmp = boost::json::value_to<real_type>(sample_obj.find("time")->value());
+        t_sites_vector.push_back(t_tmp);
+        std::vector<ordinal_type> tmp =
+          boost::json::value_to<std::vector<ordinal_type>>(sample_obj.find("data")->value());
+        KINCAT_CHECK_ERROR((tmp.size() != (n_cells_x * n_cells_y * n_basis)), "Error: sites file sample does not match to lattice information");
+        complete_tmp.insert(complete_tmp.end(), tmp.begin(), tmp.end());
+      }
+
+      KINCAT_CHECK_ERROR(sites_host_view.extent(1) != complete_tmp.size(),
+                         "Error: sites file samples do not match to lattice information");
+      copyStdVectorToKokkosView(t_sites_vector, t_sites_host_view);
+      Kokkos::deep_copy(t_sites, t_sites_host_view);
       Kokkos::deep_copy(Kokkos::subview(sites_host_view, 0, Kokkos::ALL()),
-                        value_type_1d_view<ordinal_type, host_device_type>(tmp.data(), tmp.size()));
+                        value_type_1d_view<ordinal_type, host_device_type>(complete_tmp.data(), complete_tmp.size()));
       Kokkos::deep_copy(sites_view, sites_host_view);
     }
 
   } catch (const std::exception &e) {
-    std::cerr << "Error: exception is caught parsing json input rates file\n" << e.what() << "\n";
+    std::cerr << "Error: exception is caught parsing json input file sites object\n" << e.what() << "\n";
   }
 
   return 0;
@@ -977,7 +1072,7 @@ ordinal_type parseSolverInput(const boost::json::object &root, std::string &solv
       n_cells_domain_x = tmp[0];
       n_cells_domain_y = tmp[1];
     }
-
+    
     solver_random_seed = boost::json::value_to<ordinal_type>(root.find("random seed")->value());
     solver_random_pool_size = boost::json::value_to<ordinal_type>(root.find("random pool size")->value());
     n_kmc_kernel_launches =
@@ -995,7 +1090,8 @@ ordinal_type parseSolverInput(const boost::json::object &root, std::string &solv
     }
 
   } catch (const std::exception &e) {
-    std::cerr << "Error: exception is caught parsing json input rates file\n" << e.what() << "\n";
+    std::cout << "Execption " << __LINE__ << '\n';
+    std::cerr << "Error: exception is caught parsing json input solver object\n" << e.what() << "\n";
   }
 
   return 0;
@@ -1079,11 +1175,26 @@ ordinal_type parseEnsembleInput(const boost::json::object &root, ordinal_type &n
             boost::json::value_to<std::string>(sites_random_variation_root.find("apply")->value());
         site_random_fill_ratio.clear();
         if (apply == "enabled") {
-          std::vector<real_type> tmp = boost::json::value_to<std::vector<real_type>>(
-              sites_random_variation_root.find("random fill ratio")->value());
-          site_random_fill_ratio.resize(n_samples);
-          for (ordinal_type i = 0, iend = site_random_fill_ratio.size(); i < iend; ++i) {
-            site_random_fill_ratio[i] = tmp[i % tmp.size()];
+          std::cout << __LINE__ << "\n";
+          const auto fill_it = sites_random_variation_root.find("random fill ratio");
+          if (fill_it != sites_random_variation_root.end()) { // fill ratio variants included
+            std::vector<real_type> tmp;
+            boost::json::object fill_root = fill_it->value().as_object();
+            ordinal_type tmp_size = 0;
+            for (ordinal_type fill_idx = 0; fill_idx < n_samples; fill_idx++) {
+              KINCAT_CHECK_ERROR((fill_root.find(std::to_string(fill_idx)) == fill_root.end()), 
+                                  "Missing fill ratios sample in 'random fill ratio'");
+              tmp = boost::json::value_to<std::vector<real_type>>(fill_root.find(std::to_string(fill_idx))->value());
+              if (tmp_size == 0) {
+                tmp_size = tmp.size();
+              }
+              KINCAT_CHECK_ERROR((tmp.size() != (tmp_size)),
+                                  "Sample fill ratio does not have same number of entries (species) as before");
+              for (ordinal_type tmp_idx = 0; tmp_idx < tmp.size(); tmp_idx++) {
+                site_random_fill_ratio.push_back(tmp[tmp_idx]);
+              }
+            }
+          } else {// each sample will be filled by the ratios given in the sites object.
           }
         }
       }
@@ -1113,7 +1224,6 @@ ordinal_type parseEnsembleInput(const boost::json::object &root, ordinal_type &n
               process_override =
                   boost::json::value_to<std::vector<std::string>>(rates_variation_root.find("processes")->value());
               ordinal_type n_proc_override = process_override.size();
-              // std::cout << "n_proc_override: " << n_proc_override << '\n';
               const auto rates_it = rates_variation_root.find("process rates");
               KINCAT_CHECK_ERROR((rates_it == rates_variation_root.end()),
                                  "no process rates given, even though processes given in 'rates variations' object");
@@ -1138,34 +1248,6 @@ ordinal_type parseEnsembleInput(const boost::json::object &root, ordinal_type &n
                 std::cout << "key: process instances in rates variations does not exist\n";
               }
             } else {
-
-              /* Try ptree
-              instance_override = boost::json::value_to<std::vector<ordinal_type>>(
-                rates_variation_root.find("process instances")->value());
-              ordinal_type n_inst_override = instance_override.size();
-              boost::property_tree::ptree property_tree;
-              boost::property_tree::read_json(rates_variation_root->value(), property_tree);
-
-              auto data_node = property_tree.get_child("rates variations.instance rates");
-              ordinal_type num_columns = -1;
-              std::vector<std::vector<real_type>> data_array;
-              for (auto & row_node : data_node) {
-                std::vector<real_type> row;
-                for (auto & value_node : row_node.second) {
-                  real_type value = value_node.second.get_value<real_type>();
-                  row.push_back(value);
-                }
-                if (num_columns == -1) {
-                  num_columns = int(row.size());
-                }
-                else if (num_columns != int(row.size())) {
-                  KINCAT_CHECK_ERROR(true, "instance rates object has an inconsistant number of rates per sample");
-                }
-                data_array.push_back(row);
-              }
-              instance_rates_override = data_array;
-
-              */
               // Clunky but works, dictionary inputs
               instance_override = boost::json::value_to<std::vector<ordinal_type>>(
                   rates_variation_root.find("process instances")->value());
@@ -1278,6 +1360,7 @@ ordinal_type parseEnsembleInput(const boost::json::object &root, ordinal_type &n
     }
 
   } catch (const std::exception &e) {
+    std::cout << "Execption " << __LINE__ << '\n';
     std::cerr << "Error: exception is caught parsing json input rates file\n" << e.what() << "\n";
   }
 
@@ -1316,14 +1399,12 @@ ordinal_type Input::parse(const std::string input_filename, const ordinal_type v
         boost::json::value jv;
         r_val = KinCat::parseInputfile(filename, jv, verbose);
         KINCAT_CHECK_ERROR(r_val, "Error: fails to parse input json file [dictionary]");
-
         boost::json::object root;
         r_val = KinCat::validateDictionaryInput(jv, root, verbose);
         KINCAT_CHECK_ERROR(r_val, "Error: fails to validate dictionary input");
-
         r_val = KinCat::parseDictionaryInput(
             root, _edge_vectors, _basis_vectors, _symmetry_operations, _site_coordinates, _n_species,
-            _variant_orderings, _n_cells_interaction_x, _n_cells_interaction_y, _configurations, _processints,
+            _variant_orderings, _symmetry_orderings, _n_cells_interaction_x, _n_cells_interaction_y, _configurations, _configuration_sets, _processints,
             _constraints, _process_symmetries, _processes, _process_index, _process_constraints, verbose);
         KINCAT_CHECK_ERROR(r_val, "Error: fails to parse dictionary input");
       }
@@ -1345,7 +1426,6 @@ ordinal_type Input::parse(const std::string input_filename, const ordinal_type v
         boost::json::value jv;
         r_val = KinCat::parseInputfile(filename, jv, verbose);
         KINCAT_CHECK_ERROR(r_val, "Error: fails to parse input json file [rates]");
-
         boost::json::object root;
         r_val = KinCat::validateRatesInput(jv, root, verbose);
         KINCAT_CHECK_ERROR(r_val, "Error: fails to validate rates input");
@@ -1356,7 +1436,7 @@ ordinal_type Input::parse(const std::string input_filename, const ordinal_type v
     }
 
     /// sort and remap
-    { r_val = KinCat::sortAndRemapDictionary(_configurations, _processints, _constraints, _rates); }
+    { r_val = KinCat::sortAndRemapDictionary(_configurations, _configuration_sets, _processints, _constraints, _rates); }
 
     /// sites
     {
@@ -1370,7 +1450,6 @@ ordinal_type Input::parse(const std::string input_filename, const ordinal_type v
       boost::json::object root;
       r_val = KinCat::validateSitesInput(jv, root, verbose);
       KINCAT_CHECK_ERROR(r_val, "Error: fails to validate sites input");
-
       r_val = KinCat::parseSitesInput(root,
                                       /// site init type
                                       _site_init_type,
@@ -1399,6 +1478,13 @@ ordinal_type Input::parse(const std::string input_filename, const ordinal_type v
           KINCAT_CHECK_ERROR(r_val, "fails to validate dump input object");
           const auto file_it = root.find("dump filename");
           _dump_filename = KinCat::replaceEnvironmentVariable(boost::json::value_to<std::string>(file_it->value()));
+          const auto file_rs_it = root.find("restart filename");
+          if (file_rs_it == root.end()) { //Restart file not specified
+            std::string _save = "restart_sites.json";
+            _restart_save_filename = _save; 
+          } else {
+            _restart_save_filename = KinCat::replaceEnvironmentVariable(boost::json::value_to<std::string>(file_rs_it->value()));
+          }
           const auto int_it = root.find("dump interval");
           if (int_it == root.end()) {
             _dump_interval = 0.0;
@@ -1415,7 +1501,6 @@ ordinal_type Input::parse(const std::string input_filename, const ordinal_type v
         std::cout << "dump interval : " << _dump_interval << "\n";
       }
     }
-
     /// stats file
     {
       {
@@ -1457,7 +1542,6 @@ ordinal_type Input::parse(const std::string input_filename, const ordinal_type v
         std::cout << '\n';
       }
     }
-
     /// solver
     {
       boost::json::value jv;
@@ -1470,7 +1554,6 @@ ordinal_type Input::parse(const std::string input_filename, const ordinal_type v
       boost::json::object root;
       r_val = KinCat::validateSolverInput(jv, root, verbose);
       KINCAT_CHECK_ERROR(r_val, "Error: fails to validate solver input");
-
       r_val = KinCat::parseSolverInput(root,
                                        /// solver type
                                        _solver_type,
@@ -1496,7 +1579,6 @@ ordinal_type Input::parse(const std::string input_filename, const ordinal_type v
                            "Error: lattice is not an even multiple of domain y");
       }
     }
-
     /// ensemble
     {
       const auto it = jv_input_obj.find("ensemble");
@@ -1507,12 +1589,20 @@ ordinal_type Input::parse(const std::string input_filename, const ordinal_type v
         boost::json::object root;
         r_val = KinCat::validateEnsembleInput(jv, root, verbose);
         KINCAT_CHECK_ERROR(r_val, "Error: fails to validate ensemble input");
-
         r_val = KinCat::parseEnsembleInput(root, _n_samples, _is_solver_random_number_variation,
                                            _site_random_fill_ratio_array, _process_override_array,
                                            _process_rates_override_array, _instance_override_array,
                                            _instance_rates_override_array, verbose);
 
+        if ((_n_samples > 1) && _site_random_fill_ratio_array.size() == 0 && _site_random_fill_ratio.size() != 0) { // Vary sites, but not fill ratios, sites not read-in
+          ordinal_type n_species = _n_species - 1;
+          _site_random_fill_ratio_array.resize(_n_samples * n_species);
+          for (ordinal_type samp_idx = 0; samp_idx < _n_samples; samp_idx++) {
+            for (ordinal_type spec_idx = 0; spec_idx < n_species; spec_idx++) {
+              _site_random_fill_ratio_array[(samp_idx * n_species) + spec_idx] = _site_random_fill_ratio[spec_idx];
+            }
+          }
+        }
         KINCAT_CHECK_ERROR(r_val, "Error: fails to validate solver input");
       }
     }
