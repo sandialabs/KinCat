@@ -3,7 +3,7 @@
 
 '''
 ======================================================================================
-kincat version 1.0
+kincat version 1.1
 Copyright (2023) NTESS
 https://github.com/sandia/kincat
 Copyright 2023 National Technology & Engineering Solutions of Sandia, LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government retains certain rights in this software.
@@ -64,7 +64,7 @@ input_string = " ".join([string.split(sep='#')[0] for string in input_string.spl
 
 # Definition of input_dataset dictionary
 keywords = ['crystal', 'basis', 'directory', 'range', 'uniquepos', 'species',
-            'procmech', 'fullsym']
+            'procmech', 'fullsym', 'uniconfig']
 input_dataset = {key: None for key in keywords}  # dictionary for reading user input
 # Split input in keywords
 input_list = input_string.split(sep='& ')
@@ -114,9 +114,6 @@ logger.info(' __________________________________________________')
 logger.info(' |                                                |')
 logger.info(' |                   KinCatPy                     |')
 logger.info(' |                 Craig Daniels                  |')
-logger.info(' |                   Based on                     |')
-logger.info(' |           KineCluE v{} - {}           |'.format(kp.version, kp.date))
-logger.info(' |        T. Schuler, L. Messina, M. Nastar       |')
 logger.info(' |________________________________________________|')
 logger.info('')
 kp.print_license_notice()
@@ -185,6 +182,7 @@ crystal.set_atomicvolume()
 # crys_symop_list is a dictionary with following objects as keys: crystal, crystal_deformed
 logger.info("Searching for symmetry operations in lattice...")
 tmp_symop_list = kp.find_symmetry_operations(crystal=crystal)
+
 json_dict={}
 crystal_dict={}
 edge_vectors=copy.copy(crystal.get_primvectors())
@@ -209,6 +207,15 @@ if input_dataset['fullsym'] is None:
 else:
     full_sym_flag=True # Full symmetry output only if flagged in input file
 
+if input_dataset['uniconfig'] is None:
+    uniconfig_flag=False 
+else:
+    uniconfig_flag=True #Single configuration output only if flagged in input file. Perhaps later change to dependence on efficiency gains?
+
+if full_sym_flag:
+    if not uniconfig_flag:
+        uniconfig_flag=True
+        logger.info("Full symmetry requested. Applying UNICONFIG command.\n")
 
 crystal_file=directory+"KinCat_input.json"
 short_symop_list=[]
@@ -235,7 +242,6 @@ else:
     n_output_symops=len(symop_list)
 sym_dict={}
 sym_dict.update({"shape":[n_output_symops, 6]})
-#json_dict.update({'number of symmetry operations':len(tmp_symop_list)})
 sym_dict.update({'data':short_symop_list})
 crystal_dict.update({"symmetry operations":sym_dict})
 json_dict.update({"crystal":crystal_dict})
@@ -271,8 +277,6 @@ if full_sym_flag:
     jump_list=sym_jump_list
     jump_sym_list=[[0] for _ in jump_list]
 
-#print("\n Full Symmetries Jump List")
-#print("length= ",len(sym_jump_list))
 n_jumps = len(jump_list)  # total number of jump mechanisms (including symmetry equivalent ones)
 
 #Create initial configuration 
@@ -282,27 +286,34 @@ logger.info("Exploring Configuration Definition (starts at {:.3f} s)".format(tm.
 #Should this occur before finding symmetry equivalent jumps?
 #Should there be any checking of equivalent coordinates by symmetry or translation?
     #Simpler to not
-    #Checking symmetry can reduce number of configurations, so would be valuable...
+    #Checking symmetry can reduce number of configurations, so could be valuable...
 event_coords = kp.find_event_coords(jump_list)
+if uniconfig_flag:
+    event_coords_sets = []
+    event_coords_sets.append(event_coords)
+    jump_list_sets = [[ i for i in range(len(jump_list))]]
+else:
+    event_coords_sets, jump_list_sets = kp.find_event_coords_sets(jump_list)
+n_event_coords_sets = len(event_coords_sets)
 if not full_sym_flag: #If exploring reduced symmetry, still need to find interaction range of full symmetry for KinCat KMC. 
     full_event_coords = kp.find_event_coords(sym_jump_list)
 
 logger.info("Found {:} process coordinates.".format(len(event_coords)))
-#for cord in event_coords:
-#    logger.info("{:}".format(cord))
+logger.info("Found {:} process coordinate sets.".format(n_event_coords_sets))
 logger.info("Exploring Configuration Relationships (starts at {:.3f} s)".format(tm.time()-start_time))
 
 event_str_list=[]
 for event in jump_list:
     event_str_list.append(str(event.get_name()))
 
-#print("Finding configuration site_list:")
 logger.info("Finding configuration sites.")
 
-coords_list=kp.confsites(event_coords=event_coords, kira=KiRa, crystal=crystal, species=species_list) #finds all the sites that need to be specified
-#logger.info("Initial guess at configuration sites: ")
-#for cord in coords_list:
-#    logger.info("{:}".format(cord))
+coords_list = kp.confsites(event_coords=event_coords, kira=KiRa, crystal=crystal, species=species_list) #finds all the sites that need to be specified
+coords_list_sets = []
+for i in range(n_event_coords_sets):
+    temp_list = kp.confsites(event_coords=event_coords_sets[i], kira=KiRa, crystal=crystal, species=species_list) #finds all the sites that need to be specified
+    coords_list_sets.append(temp_list)
+
 if not full_sym_flag:
     full_coords_list=kp.confsites(event_coords=full_event_coords, kira=KiRa, crystal=crystal, species=species_list) #finds all sites needed to be specified in full symmetry case
     tmp=len(full_coords_list[0])
@@ -310,11 +321,13 @@ if not full_sym_flag:
     x_min=0
     y_max=0
     y_min=0
+    print("Fullsym Coordinates")
     for cord in full_coords_list:
         x_max=max(cord[0],x_max)
         x_min=min(cord[0],x_min)
         y_max=max(cord[1],y_max)
         y_min=min(cord[1],y_min)
+        print("[", cord[0], ",", cord[1],"]")
     x_max=kp.index_round(x_max)
     x_min=kp.index_round(x_min)
     y_max=kp.index_round(y_max)
@@ -338,32 +351,42 @@ else:
     y_min=kp.index_round(y_min)
     x_interaction=x_max-x_min
     y_interaction=y_max-y_min
+logger.info("Configuration Mins and Maxes : [{:}, {:}], [{:}, {:}]".format(x_min,y_min,x_max,y_max))
 logger.info("Found {:} configuration coordinates.)".format(len(coords_list)))
-#for cord in coords_list:
-#    logger.info("{:}".format(cord))
 if full_sym_flag:
         config_sym_relationships=[[cord for cord in range(len(coords_list))]]
         for p,op in enumerate(symop_list):
             if kp.are_equal_arrays(op.get_rotation(),np.identity(3)):
                 temp_ind=copy.copy(p)
                 config_symops=[temp_ind]
+        config_sym_relationships_dict={}
+        config_sym_relationships_dict.update({str(i):config_sym_relationships})
 else:
     logger.info("Finding configuration symmetry relationships.")
     config_symops,config_sym_relationships= kp.config_sym_define(coords_list=coords_list, symop_list=symop_list)
+    config_symops_sets=[]
+    config_sym_relationships_sets=[]
+    config_sym_relationships_dict={}
+    reduced_symop_list = []
+    for i in range(len(config_symops)):
+        reduced_symop_list.append(symop_list[config_symops[i]])
+    for i in range(n_event_coords_sets):
+        temp_config_symops,temp_config_sym_relationships = kp.config_sym_define(coords_list=coords_list_sets[i], symop_list=reduced_symop_list)
+        config_symops_sets.append(temp_config_symops)
+        config_sym_relationships_sets.append(temp_config_sym_relationships)
+        config_sym_relationships_dict.update({str(i):temp_config_sym_relationships})
 #Translate event mechanisms into configuration index operations
-config_event_list=kp.config_event_def(coords_list=coords_list, jump_list= jump_list) #may not need this anymore
+config_event_list=kp.config_event_def(coords_list=coords_list, jump_list= jump_list, jump_set_list=range(len(jump_list))) #may not need this anymore
+config_sets_event_list = []
+for i in range(n_event_coords_sets):
+    config_sets_event_list.append(kp.config_event_def(coords_list=coords_list_sets[i], jump_list= jump_list, jump_set_list=jump_list_sets[i]))
 
-n_coords=len(coords_list)
-conf_symop_list=[]
-for i in config_symops:
-    conf_symop_list.append(kp.SymOp(symop_list[i].get_rotation()))
-ini_defects=[]
-for i in range(n_coords): #need to fix!!!???
-    ini_defects.append([component_list[0].get_species().get_defects()[0].get_symeq()[0]]) #Assuming everything on main lattice (no basis or sublattice)
 
-config_template=kp.CatConfTemplate(defects=ini_defects, translations=coords_list, config_symops=config_symops, symop_relations=config_sym_relationships, crystal=crystal, event_coords=event_coords)
-config_template.set_events(config_event_list)
 config_json_dict={}
+config_json_dict.update({"interaction range":[int(x_interaction),int(y_interaction)]}) #Previous method added 1 to each
+print("found interaction range : [", int(x_interaction), ", ", int(y_interaction), "]")
+#config_json_dict.update({"interaction range":[int(max(np.abs(x_max),np.abs(x_min))),int(max(np.abs(y_max),np.abs(y_min)))]}) 
+#print("found interaction range : [", int(max(np.abs(x_max),np.abs(x_min))), ", ", int(max(np.abs(y_max),np.abs(y_min))), "]")
 json_coords=[]
 for i in range(len(coords_list)):
     tmp=coords_list[i].tolist()
@@ -371,7 +394,46 @@ for i in range(len(coords_list)):
     json_coords.append(tmp)
 config_json_dict.update({"site coordinates":json_coords})
 config_json_dict.update({"variant orderings":config_sym_relationships})
-config_json_dict.update({"interaction range":[int(x_interaction+1),int(y_interaction+1)]})
+config_json_dict.update({"symmetry orderings":config_sym_relationships_dict})
+
+config_json_dict_sets = [{} for _ in range(n_event_coords_sets)]
+if uniconfig_flag:
+    n_coords=len(coords_list)
+    conf_symop_list=[]
+    for i in config_symops:
+        conf_symop_list.append(kp.SymOp(symop_list[i].get_rotation()))
+    ini_defects=[]
+    for i in range(n_coords): 
+        #need to fix!!!???
+        #Does not appear to need fixing.
+        #Permissions information currently handled by whether or not jumps are valid, and configurations by if valid jumps to/from.
+        #check_configuration_consistence() function also appears to catch when defects are invalid (based on species defects permissions)
+        ini_defects.append([component_list[0].get_species().get_defects()[0].get_symeq()[0]]) #Assuming everything on main lattice (no basis or sublattice)
+
+    config_template=kp.CatConfTemplate(defects=ini_defects, translations=coords_list, config_symops=config_symops, symop_relations=config_sym_relationships, crystal=crystal, event_coords=event_coords)
+    config_template.set_events(config_event_list)
+    config_template_sets = []
+    config_template_sets.append(config_template)
+
+else: #not uniconfig
+    config_template_sets = []
+    for seti in range(n_event_coords_sets):
+        n_coords=len(coords_list_sets[seti])
+        conf_symop_list=[]
+        for j in config_symops_sets[seti]:
+            conf_symop_list.append(kp.SymOp(symop_list[j].get_rotation()))
+        ini_defects=[]
+        for i in range(n_coords):
+            ini_defects.append([component_list[0].get_species().get_defects()[0].get_symeq()[0]])
+        config_template=kp.CatConfTemplate(defects=ini_defects, translations=coords_list_sets[seti], config_symops=config_symops_sets[seti], symop_relations=config_sym_relationships_sets[seti], crystal=crystal, event_coords=event_coords_sets[seti])
+        config_template.set_events(config_sets_event_list[seti])
+        config_template_sets.append(config_template)
+        json_coords=[]
+        for idx in range(len(coords_list_sets[seti])):
+            tmp=coords_list_sets[seti][idx].tolist()
+            tmp.pop(2)
+            json_coords.append(tmp)
+  
 
 # END READING INPUT AND FORMATTING DATA-------------------------
 
@@ -379,46 +441,90 @@ config_json_dict.update({"interaction range":[int(x_interaction+1),int(y_interac
 logger.info("Creating configuration space (starts at {:.3f} s)".format(tm.time() - start_time))
 logger.info("Peak memory usage up to now: {:.3f} MB.".format(process_for_memory_tracking.memory_info()[0]*1e-6))  # peak memory usage
 
-freq_list = {}  # list of jump frequencies (w)
 config_list = {}  # comprehensive configuration list
+n_coords_max = 0
+for seti in range(n_event_coords_sets):
+    n_coords_max=max(n_coords_max,len(coords_list_sets[seti]))
 
 ##Configuration permutations:
+def config_checks(check_perm, seti) -> None:
+    temp_n_coords = len(check_perm)
+    ini_defects=[]
+    ini_species=[]
+
+    new_check_perm = [(check_perm[i] - 1) % (n_species+1) for i in range(temp_n_coords)]
+        
+    for i in range(temp_n_coords):
+        ini_defects.append([component_list[0].get_species().get_defects()[0].get_symeq()[0]]) #Assuming everything on main lattice (no basis or sublattice)
+        ini_species.append(kp.Species(species_list[new_check_perm[i]].get_index(),species_list[new_check_perm[i]].get_name(),species_list[new_check_perm[i]].get_defects(),species_list[new_check_perm[i]].get_permissions(),species_list[new_check_perm[i]].get_radius()))
+        #NB!!! [j.get_index() for j in ini_species] is NOT THE SAME as PERM! (0 index species is last in species list, not first). 
+        #new_check_perm now corrects this, shifting all perms so configurations should be sorted correctly for KinCat. KinCat checks and resorts if necessary, but this should help with clarity and debugging.
+
+    #Check if configurations match system definition
+    if (kp.check_subconfiguration_consistence(species_list=ini_species, position_list=coords_list_sets[seti], all_defect_list=all_defect_list,crystal=crystal,component_list=[])):
+        if (kp.check_configuration_exclusion(species_list=ini_species, config_template=config_template_sets[seti])):
+            ini_species_ind=[j.get_index() for j in ini_species]
+            kp.sym_config_add_unique(ini_species_ind=ini_species_ind, config_template=config_template_sets[seti], config_dict=config_dict_sets, config_species_lists=config_species_lists, seti=seti) # adds configuration if not already found
+
 def permute_species_configs(ix,perm) -> None:
-    if ix<=n_coords:
+    if ((ix == 4) and print_search_flag):
+        logger.info("Searching perm space [{:}, {:}, {:}] at {:.3f} s)".format(perm[0], perm[1], perm[2], (tm.time() - start_time)))
+    for idx in range(n_event_coords_sets):
+        if (ix-1) == len(coords_list_sets[idx]):
+            config_checks(check_perm=perm, seti=idx)
+    if ix<=n_coords_max:
         for i in range(n_species+1):
             new_perm=perm.copy()
             new_perm.append(i)
             permute_species_configs(ix+1,new_perm)
-    else:
-        ini_defects=[]
-        ini_species=[]
         
-        for i in range(n_coords):
-            ini_defects.append([component_list[0].get_species().get_defects()[0].get_symeq()[0]]) #Assuming everything on main lattice (no basis or sublattice)
-            ini_species.append(kp.Species(species_list[perm[i]].get_index(),species_list[perm[i]].get_name(),species_list[perm[i]].get_defects(),species_list[perm[i]].get_permissions(),species_list[perm[i]].get_radius()))
-            #NB!!! [j.get_index() for j in ini_species] is NOT THE SAME as PERM! (0 index species is last in species list, not first). 
-            #test_spec_count[species_list[perm[i]].get_index()]+=1 #Do I need this anymore?
 
-        #Check if configurations match system definition
-        if (kp.check_subconfiguration_consistence(species_list=ini_species, position_list=coords_list, all_defect_list=all_defect_list,crystal=crystal,component_list=[])):
-            if (kp.check_configuration_exclusion(species_list=ini_species, config_template=config_template)):
-                ini_species_ind=[j.get_index() for j in ini_species]
-                kp.sym_config_add_unique(ini_species_ind=ini_species_ind, config_template=config_template, config_dict=config_dict, config_species_lists=config_species_lists) # adds configuration if not already found
+config_dict_sets=[{} for _ in range(n_event_coords_sets)]
+config_species_lists=[[] for _ in range(n_event_coords_sets)] #filled by permute_species_configs()
 
-
-config_dict={}
-config_species_lists=[]
+print_search_flag = False
+if (((n_species+1)**n_coords_max)>100000):
+    print_search_flag = True
+    print("Need to search ", ((n_species+1)**n_coords_max), " potential configurations.")
 permute_species_configs(ix=1,perm=[])
+complete_config_list = []
+n_full_coords = len(coords_list)
+full_config_counter = [0 for _ in range(n_event_coords_sets)]
+config_counter = 0
 
-config_json_dict.update({"shape": [len(config_species_lists), len(config_species_lists[0])]})
-config_data=np.array(config_species_lists)
-config_data=np.reshape(config_data,(len(config_species_lists)*len(config_species_lists[0])))
+for seti in range(n_event_coords_sets):
+    coord_correspond = [-10 for _ in range(len(coords_list_sets[seti]))]
+    full_config_counter[seti] = full_config_counter[seti-1] + config_counter
+    config_counter = 0
+    for i in range(len(coords_list_sets[seti])):
+        found_flag = False
+        for j in range(len(coords_list)):
+            if kp.are_equal_arrays(np.array(coords_list_sets[seti][i]), coords_list[j]):
+                coord_correspond[i] = j
+                found_flag = True
+        if not found_flag:
+            print("PROBLEM")
+
+    for i in range(len(config_species_lists[seti])):
+        temp_conf = [-1 for _ in range(n_full_coords)]
+        for j in range(len(coord_correspond)):
+            temp_conf[coord_correspond[j]] = config_species_lists[seti][i][j]
+        complete_config_list.append(temp_conf)
+        config_counter = config_counter + 1
+
+full_config_counter.append(len(complete_config_list))
+config_json_dict.update({"configuration_sets":full_config_counter})
+config_json_dict.update({"shape": [len(complete_config_list), len(complete_config_list[0])]})
+config_data=np.array(complete_config_list)
+config_data=np.reshape(config_data,(len(complete_config_list)*len(complete_config_list[0])))
 config_json_dict.update({"data": config_data.tolist()})
+
 json_dict.update({"configurations":config_json_dict})
-logger.info("Found {:} configurations.".format(len(config_species_lists)))
+n_configurations = 0
+for i in range(n_event_coords_sets):
+    n_configurations += len(config_species_lists[i])
+logger.info("Found {:} configurations.".format(n_configurations))
 logger.info("Peak memory usage up to now: {:.3f} MB.".format(process_for_memory_tracking.memory_info()[0]*1e-6))  
-
-
 logger.info("Finding process instances (starts at {:.3f} s)".format(tm.time() - start_time))
 
 freq_list=[]
@@ -427,51 +533,60 @@ event_list=[]
 jump_list_str=[jump.get_name() for jump in jump_list]
 event_json_dict={}
 event_json_dict.update({"processes": jump_list_str})
+event_json_set_dict={}
+
 event_json_dict.update({"process constraints":config_event_list})
 event_json_dict.update({"process symmetries": jump_sym_list})
 
-
-
 #Begin Parallel Block
 #Uses threading/multiprocessor to try to speed up finding events (process instances)
-full_event_list=[]
-full_event_set=set()
-symmetry_orders=config_template.get_relations()
-coord_dict=config_template.get_coord_dict()
-non_sym_event_list=[]
+config_event_lists=[[] for _ in range(n_event_coords_sets)]
+config_event_sets=[set() for _ in range(n_event_coords_sets)]
+full_event_counter = 0
+complete_event_list = []
+
+for seti in range(n_event_coords_sets):
+    symmetry_orders=config_template_sets[seti].get_relations()
+    event_json_set_dict={}
+    event_json_set_dict.update({"configuration processes": jump_list_sets[seti]})
+    event_json_set_dict.update({"process constraints": config_sets_event_list[seti]})
+    jump_sym_list_set = []
+
+    for jump_idx in range(len(jump_list_sets[seti])):
+        jump_sym_list_set.append(jump_sym_list[jump_list_sets[seti][jump_idx]])
+    event_json_set_dict.update({"process symmetries": jump_sym_list_set})
+    if (len(config_species_lists[seti])<100000): #Serial is fast enough, little to no benefit to parallelizing due to overhead
+        full_event_list=kp.find_all_events_config(allevents=config_sets_event_list[seti],config_species_lists=config_species_lists[seti], config_template=config_template_sets[seti], config_dict=config_dict_sets[seti])
+
+    else:
+        ## Multiprocessing Attempt
+        if __name__=="__main__":
+            #print("In multi")
+
+            ##Using separate script, single output file. Works, but only achieves speedup of 3x, benefits maximxize with 8 processors with 8-core machine
+            nproc=8
+            logger.info("Conducting parallel process instance search.")
+            logger.info("Using {} processors.".format(nproc))
+            pickle.dump([config_species_lists[seti], config_template_sets[seti], config_dict_sets[seti], nproc],open(directory + 'events_calc.pkl', 'wb'), -1)
+            bashCommand=('python ../kincat_event_calc.py '+(directory))
+            process = subprocess.Popen(bashCommand.split(), stdout= subprocess.PIPE)
+            output, error = process.communicate()
+            full_event_list=pickle.load(open((directory+'events_list.pkl'), 'rb'))
+
+    #End Multiprocessing Block
+
+    for edx in range(len(full_event_list)):
+        complete_event_list.append([full_event_list[edx][0]+full_config_counter[seti], full_event_list[edx][1]+full_config_counter[seti], jump_list_sets[seti][full_event_list[edx][2]]])
+    
+    full_event_counter = full_event_counter + len(full_event_list)
 
 
-if (len(config_species_lists)<100000): #Serial is fast enough, little to no benefit to parallelizing due to overhead
-    full_event_list=kp.find_all_events_config(allevents=config_event_list,config_species_lists=config_species_lists, config_template=config_template, config_dict=config_dict)
-
-else:
-    ## Multiprocessing Attempt
-    if __name__=="__main__":
-        #print("In multi")
-
-        ##Using separate script, single output file. Works, but only achieves speedup of 3x, benefits maximxize with 8 processors with 8-core machine
-        nproc=8
-        logger.info("Conducting parallel process instance search.")
-        logger.info("Using {} processors.".format(nproc))
-        pickle.dump([config_species_lists, config_template, config_dict, nproc],open(directory + 'events_calc.pkl', 'wb'), -1)
-        bashCommand=('python ../kincat_event_calc.py '+(directory))
-        #print(bashCommand)
-        process = subprocess.Popen(bashCommand.split(), stdout= subprocess.PIPE)
-        output, error = process.communicate()
-        #print(output)
-        full_event_list=pickle.load(open((directory+'events_list.pkl'), 'rb'))
-
-#End Parallel Block
-
-event_json_dict.update({"shape": [len(full_event_list), 3]})
-event_data=np.array(full_event_list)
-
-event_data=np.reshape(event_data,(len(full_event_list)*3)).tolist()
+event_json_dict.update({"shape": [len(complete_event_list),3]})
+event_data = np.array(complete_event_list)
+event_data = np.reshape(event_data, (len(complete_event_list)*3)).tolist()
 event_json_dict.update({"data": event_data})
 json_dict.update({"process dictionary": event_json_dict})
-#print(len(full_event_list)," event frequencies found.")
-
-logger.info("Found {:} process instances.".format(len(full_event_list)))
+logger.info("Found {:} process instances.".format(full_event_counter))
 
 # Writing configuration file 
 logger.info("Writing configuration values file (starts at {:.3f} s)".format(tm.time() - start_time))
