@@ -94,6 +94,28 @@ SolverSerialRTA<DT>::initialize(const bool is_solver_random_number_variation, co
   /// update rates
   Impl::updateEventRatesLatticeDevice(_sid, _lattice, _dictionary, _instance_rates, verbose);
 
+  //std::ofstream sum_rates_ofs;
+  //sum_rates_ofs.open("serial_test_rates.txt", std::ios::out | std::ios::trunc);
+  //sum_rates_ofs << std::setprecision(15);
+  //for (ordinal_type i = 0; i < _instance_rates.extent(0); i++) {
+  //  sum_rates_ofs << real_type(_instance_rates(i)) << '\n';
+  //}
+
+  //sum_rates_ofs.close();
+
+  //std::ofstream proc_count_ofs;
+  //proc_count_ofs.open("serial_proc_counts.txt", std::ios::out | std::ios::trunc);
+  //for (ordinal_type i = 0, iend = _dictionary._found_process_counter.extent(0); i < iend; i++) {
+  //  proc_count_ofs << _dictionary._found_process_counter(i) << '\n';
+  //}
+  //proc_count_ofs.close();
+  //std::ofstream inst_count_ofs;
+  //inst_count_ofs.open("serial_inst_counts.txt", std::ios::out | std::ios::trunc);
+  //for (ordinal_type i = 0, iend = _dictionary._found_instance_counter.extent(0); i < iend; i++) {
+  //  inst_count_ofs << _dictionary._found_instance_counter(i) << '\n';
+  //}
+  //inst_count_ofs.close();
+
   return 0;
 }
 
@@ -161,8 +183,6 @@ ordinal_type SolverSerialRTA<DT>::advance(const value_type_2d_view<real_type, DT
     real_type sum_rates_cell(-1);
     Impl::findEvent(_sid, _lattice, _dictionary, k0, k1, pos - _instance_rates_scan[cid], idx_instance, idx_pattern,
                     idx_variant, sum_rates_cell, verbose);
-
-    /// check if instance is possible or not
     const auto idx_variant_output = _dictionary._constraints(idx_instance, idx_variant);
 
     if (verbose > 2) {
@@ -177,17 +197,13 @@ ordinal_type SolverSerialRTA<DT>::advance(const value_type_2d_view<real_type, DT
       const real_type epsilon(1e-10);
       KINCAT_CHECK_ERROR(std::abs(sum_rates_cell - _instance_rates(cid)) > epsilon,
                          "Error: rate on this site does not match to instance rate data");
-
-      /// update lattice configuration
       Impl::updateLatticeConfiguration(_sid, _lattice, _dictionary, k0, k1, idx_instance, idx_pattern, idx_variant,
                                        verbose);
-
       /// update rates
       Impl::updateEventRates(_sid, _lattice, _dictionary, k0, k1, _n_cells_interaction_x, _n_cells_interaction_y,
                              _instance_rates, verbose);
-
       /// record counter
-      _counter.update(_sid, idx_instance);
+      _counter.update(_sid, 0, idx_instance); //Only one domain...
 
       /// advance global time
       t_in(0, 0) += dt;
@@ -197,7 +213,6 @@ ordinal_type SolverSerialRTA<DT>::advance(const value_type_2d_view<real_type, DT
         break;
     }
   }
-
   return 0;
 }
 
