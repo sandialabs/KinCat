@@ -3,6 +3,8 @@
 #include "KinCat_Main_Util.hpp"
 
 int main(int argc, char *argv[]) {
+  auto all_start = std::chrono::steady_clock::now();
+
   using real_type = KinCat::real_type;
   using ordinal_type = KinCat::ordinal_type;
   using site_type = KinCat::site_type;
@@ -77,23 +79,25 @@ int main(int argc, char *argv[]) {
     if (in._site_init_type == "random") {
       lattice.randomizeSites(in._site_random_fill_ratio, in._site_random_seed);
     } else if (in._site_init_type == "file") {
-      KINCAT_CHECK_ERROR(true, "Error: this probably does not work anymore as the dump-site.json format is unified "
-                               "with the batch interface");
+      lattice.readinSites(in._sites, verbose_parse);
     }
-    KINCAT_CHECK_ERROR(in._n_cells_interaction_x > in._n_cells_domain_x,
-                       "Error: the domain size in x is smaller than the interaction range in x");
-    KINCAT_CHECK_ERROR(in._n_cells_interaction_y > in._n_cells_domain_y,
-                       "Error: the domain size in y is smaller than the interaction range in y");
+
+    KINCAT_CHECK_ERROR((in._n_cells_interaction_x * 2) + 1 > in._n_cells_domain_x,
+                       "Error: the domain size in x needs to be over twice the interaction range in x");
+    KINCAT_CHECK_ERROR((in._n_cells_interaction_y * 2) + 1 > in._n_cells_domain_y,
+                       "Error: the domain size in y needs to be over twice the interaction range in y");
+    
     lattice.setDomain(in._n_cells_domain_x, in._n_cells_domain_y);
     lattice.showMe(std::cout, "Lattice", verbose);
 
     ///
     /// create dictionary
     ///
-    KinCat::ProcessDictionary<device_type> dictionary(in._variant_orderings, in._configurations, in._processints,
-                                                      in._constraints, in._rates, in._process_symmetries);
+    KinCat::ProcessDictionary<device_type> dictionary(in._variant_orderings, in._symmetry_orderings, in._configurations, in._configuration_sets, in._processints,
+                                                      in._constraints, in._process_constraints, in._rates, in._process_symmetries);
     dictionary.showMe(std::cout, "Dictionary", verbose);
     dictionary.showMe(std::cout, "Instance details", in._processes, verbose);
+
     r_val = dictionary.validateData(in._processes, in._process_constraints);
     if (r_val > 0) {
       std::cerr << "Error: dictionary validateData returns with non-zero return value (" << r_val << ")\n";
@@ -103,8 +107,12 @@ int main(int argc, char *argv[]) {
     ///
     /// create counter
     ///
-    KinCat::ProcessCounter<device_type> counter(in._processes.size(), dictionary._processints);
+    ordinal_type n_domains, n_domains_x, n_domains_y;
+    n_domains = lattice.getNumberOfDomains(n_domains_x, n_domains_y);
+    KinCat::ProcessCounter<device_type> counter(n_domains, in._processes.size(), dictionary._processints);
     counter.initialize();
+
+    
 
     ///
     /// main workflow
@@ -116,13 +124,11 @@ int main(int argc, char *argv[]) {
     solver->showMe(std::cout, in._solver_type, verbose);
 
     /// time range
-    ordinal_type n_domains, n_domains_x, n_domains_y;
-    n_domains = lattice.getNumberOfDomains(n_domains_x, n_domains_y);
     KinCat::value_type_2d_view<real_type, device_type> t(KinCat::do_not_init_tag("t"), n_domains_x, n_domains_y);
     Kokkos::deep_copy(t, in._t_begin);
 
     KinCat::value_type_1d_view<real_type, host_device_type> t_global(
-        "t_global", n_samples); // TODO: Should this be with domains, rather than samples?
+        "t_global", n_samples); // TODO: Should this be with domains, rather than samples? This is single sample version... Where is it used?
 
     t_global(0) = in._t_begin;
     const real_type t_end = in._t_end;
@@ -131,6 +137,7 @@ int main(int argc, char *argv[]) {
 
     const ordinal_type n_kmc_kernel_launches = in._n_kmc_kernel_launches;
     const ordinal_type n_kmc_steps_per_kernel_launch = in._n_kmc_steps_per_kernel_launch;
+    const ordinal_type n_sites = lattice.getNumberOfSites();
     ordinal_type epoch = 0;
 
     const real_type dump_interval = in._dump_interval;
@@ -144,7 +151,13 @@ int main(int argc, char *argv[]) {
     if (in._dump_filename == "none" or in._dump_filename == "None") {
       dump_flag = false;
     }
-    KinCat::Dump<device_type> dump(in._dump_filename, "dump-site.json", lattice);
+    #ifdef HAVE_HDF5
+      bool useHDF5 = true;
+    #else
+    bool useHDF5 = false;
+    #endif
+    KinCat::Dump<device_type> dump(in._dump_filename, in._restart_save_filename, lattice, useHDF5);
+
     if (dump_flag) {
       dump.showMe(std::cout, "Dump", verbose);
       dump.initialize(t_global, verbose);
@@ -154,15 +167,18 @@ int main(int argc, char *argv[]) {
     if (in._stats_filename == "none" or in._stats_filename == "None") {
       stats_flag = false;
     }
-    KinCat::Stats<device_type> stats(in._stats_filename, in._stats_list, lattice, in._processes, counter);
+    KinCat::Stats<device_type> stats(in._stats_filename, in._stats_list, lattice, in._processes, counter, useHDF5);
     if (stats_flag) {
-
       stats.showMe(std::cout, "Stats", verbose);
       stats.initialize(t_global, verbose);
     }
     if (!dump_flag && !stats_flag) {
       std::cout << "WARNING: No output files (dump, stats) specified! \n";
     }
+
+    ordinal_type old_proc_sum(0);
+    real_type events_per_site(0.0);
+    bool events_warning(false);
 
     try {
       Kokkos::RangePolicy<typename device_type::execution_space> domain_range_policy(0, n_domains);
@@ -178,6 +194,18 @@ int main(int argc, char *argv[]) {
         }
 
         solver->advance(t, t_step, n_kmc_steps_per_kernel_launch, verbose);
+        counter.syncToHost();
+        //Check if sublattice algorithm has 'reasonable' steps
+        if (in._solver_type == "sublattice") {
+          ordinal_type proc_sum = counter.getTotalProcessCount(0);
+          events_per_site = (real_type(proc_sum - old_proc_sum)/real_type(n_sites));
+          old_proc_sum = proc_sum;
+          if ((events_per_site >= 0.5)) {
+            events_warning = true;
+            std::cout << "Warning: averaged " << events_per_site << " events per site this kernel.\n";
+          }
+        }
+        
 
         Kokkos::Min<real_type> reducer_value(t_global(0));
         Kokkos::parallel_reduce(
@@ -203,7 +231,7 @@ int main(int argc, char *argv[]) {
             stats_step += stats_interval;
           }
         }
-
+	
         if (t_global(0) >= t_step) {
           if (verbose_iterate) {
             std::cout << " epoch = " << epoch << ", t = " << t_global(0) << "\n";
@@ -222,7 +250,10 @@ int main(int argc, char *argv[]) {
       }
 
       if (t_global(0) < t_end) {
-        std::cout << "WARNING: Simulation did not reach final time!!! \nCheck if kernel or step limited! ";
+        std::cout << "WARNING: Simulation did not reach final time!!! \nCheck if kernel or step limited! \n";
+      }
+      if (events_warning) {
+        std::cout << "WARNING: Simulation may have excessive errors due to sublattice solver settings. Carefully consider errors due to sublattice solver algorithm! Reduce kernel timestep to reduce errors.";
       }
 
     } catch (const std::exception &e) {
