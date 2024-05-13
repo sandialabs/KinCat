@@ -4,6 +4,7 @@ FILE(GLOB KINCAT_HDR
    KinCat_Dump.hpp
    KinCat_ProcessCounter.hpp  
    KinCat_ProcessDictionary.hpp
+   KinCat_HDF5.hpp
    KinCat_Lattice.hpp
    KinCat_Main_Util.hpp	  
    KinCat_SolverBase.hpp
@@ -18,6 +19,8 @@ FILE(GLOB KINCAT_SRC
    KinCat_Dump.cpp	  	  	  	  
    KinCat_ProcessCounter.cpp
    KinCat_ProcessDictionary.cpp
+   KinCat_HDF5.cpp
+   KinCat_Lattice.hpp
    KinCat_Lattice.cpp
    KinCat_Main_Util.cpp
    KinCat_SolverBase.cpp
@@ -66,6 +69,7 @@ TARGET_INCLUDE_DIRECTORIES(kincat
   PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
   $<BUILD_INTERFACE:${Boost_INCLUDE_DIR}>  
+  $<BUILD_INTERFACE:${HDF5_INCLUDE_DIRS}>
   $<INSTALL_INTERFACE:${KINCAT_INSTALL_INCLUDE_PATH}>
 )
 
@@ -96,3 +100,4 @@ WRITE_BASIC_PACKAGE_VERSION_FILE(
 INSTALL(FILES "${CMAKE_CURRENT_BINARY_DIR}/KinCatConfig.cmake"
   DESTINATION "${KINCAT_INSTALL_LIB_PATH}/cmake/kincat"
 )
+
