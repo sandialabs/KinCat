@@ -39,10 +39,19 @@ using size_type = size_t;
 
 /// site data type
 #if defined(KINCAT_ENABLE_SITE_TYPE_CHAR)
-using site_type = char; /// upto 256 species using 1 byte
-#elif defined(KINCAT_ENABLE_SITE_TYPE_SHORT_INT)
-using site_type = short int; /// using 2 byte
+//#warning "site_type defined char/short"
+using site_type = short; 
+/// char provides up to 256 species using 1 byte, far more than needed. 
+/// However, using char means that it may be compiled as either signed or unsigned char. 
+/// Specifying either signed or unsigned leads to a compile error in Kokkos random.
+/// May be able to use char if switch kincatpy to use large number e.g. 100, as empty site, rather than -1.
+/// Choose instead to use short, which is a signed type. 
+/// Currently using int for HDF5 compatibility. Need to write function for shorts. 
+#elif defined(KINCAT_ENABLE_SITE_TYPE_SHORT)
+//#warning "site_type defined short"
+using site_type = short; /// using 2 byte //KK set to short int, CD changed
 #else
+//#warning "site_type defined int"
 using site_type = int; /// using 4 byte, this is probably overkill
 #endif
 
