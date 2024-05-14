@@ -3,18 +3,19 @@
 	"dictionary" : "../RuO2-dictionary.json",
 	"rates" : "../RuO2-rates.json",
 	"sites" : {
-	    "lattice" : [ 25, 25, 2 ],	    
+	    "lattice" : [ 20, 20, 2 ],	    
 	    "type" : "random",
 	    "random seed" : 13542,
-	    "random fill ratio" : 0.3,
+	    "random fill ratio" : [0.2, 0.2],
 	    "filename" : "dump-sites-batch.json"
 	},
 	"dump" : {
-		"dump filename" : "dump-ex3.json",
-		"dump interval" : 5E-7
+		"dump filename" : "dump-ex4.json",
+		"dump interval" : 5E-7,
+		"restart_filename" : "batch-restart.json"
 	},
 	"statistics" : {
-		"stats filename" : "stats-ex3.json",
+		"stats filename" : "stats-ex4.json",
 		"types" : ["species_coverage","process_counts"],
 		"stats interval" : 4E-7
 	},
@@ -32,8 +33,13 @@
 			"apply" : "enabled",
 	    },
 	    "sites random variations" : {
-			"apply" : "disabled",
-			"random fill ratio" : [ 0.3 ]
+			"apply" : "enabled",
+			"random fill ratio" : {
+				"0" : [0.3, 0.5],
+				"1" : [0.4, 0.4],
+				"2" : [0.5, 0.3],
+				"3" : [0.6, 0.2]
+			}
 	    },
 	    "rates variations" : {
 			"apply" : "enabled",
