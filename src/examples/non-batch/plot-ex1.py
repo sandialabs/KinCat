@@ -143,11 +143,9 @@ def plotSnapshot(idx, arg_coords, arg_time, arg_sites):
     plt.show()
 
 # initial
-#plotSnapshot(0, coords, dump_time, sites)
-
+plotSnapshot(0, coords, dump_time, sites)
 # second
 #plotSnapshot(1, coords, dump_time, sites)
-
 # final
 plotSnapshot(len(dump_time)-1, coords, dump_time, sites)
 
