@@ -68,7 +68,7 @@ def data_reduce(arg_time, arg_cov, arg_procs):
     #print(len(red_time))
     return red_time, red_coverage, red_proc_counts
 
-n_samples, time_full, coverage_full, proc_counts_full, n_sites = readStatsFile("stats-ex3.json")
+n_samples, time_full, coverage_full, proc_counts_full, n_sites = readStatsFile("stats-ex4.json")
 # number of species needs to be specified
 
 
@@ -159,7 +159,7 @@ def readDumpFile(arg_filename):
     return np_2d_coords, np_2d_snapshot_time, np_3d_snapshot_sites
 
 
-coords, dump_time, sites_full = readDumpFile("dump-ex3.json")
+coords, dump_time, sites_full = readDumpFile("dump-ex4.json")
 # number of species needs to be specified
 #n_species = 1
 #for i in sites:
@@ -224,4 +224,4 @@ def animateSnapshots(arg_coords, arg_time, arg_sites, arg_filename):
     #anim.save(arg_filename, fps=60)
 
 for sid in range(n_samples):
-    animateSnapshots(coords, dump_time[sid], sites_full[sid], "ex3.mp4")
+    animateSnapshots(coords, dump_time[sid], sites_full[sid], "ex4.mp4")
