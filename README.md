@@ -6,3 +6,5 @@ Questions? Contact Craig Daniels at cjdanie@sandia.gov
 Sandia National Laboratories, Albuquerque, NM, USA ======================================================================================*/
 
 KinCat is an open-source 2D lattice KMC simulator. It is written in Python and C++ with the Kokkos library.
+
+KinCat build instructions, file explanations, and other documentation can be found in the kincat.pdf file. It can also be generated in other formats using sphinx from the source files found in the src/sphinx directory. Example input and post-processing files can be found in the src/examples directory. The core c++ code is stored in src/core. However, the preprocessing code, KinCatPy is found in the kincatpy directory. Note that src/unit-test holds code for unit tests to confirm functionality, but these are deprecated. 
