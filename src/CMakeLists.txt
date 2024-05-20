@@ -145,6 +145,11 @@ ENDIF()
 # #
 # # HDF5 (dumping data)
 # #
+IF (HDF5_LIBRARY_DIRS)
+  link_directories(${HDF5_LIBRARY_DIRS})
+  LIST(APPEND KINCAT_LINK_LIBRARIES ${HDF5_LIBRARIES})
+  SET(HAVE_HDF5 ON)
+ENDIF()
 
 #
 # Link libraries against KINCAT
@@ -172,5 +177,6 @@ ENDIF()
 # IF (KINCAT_ENABLE_EXAMPLE)
 #   ADD_SUBDIRECTORY (examples)
 # ENDIF()
+
 
 
