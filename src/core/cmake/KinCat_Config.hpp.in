@@ -9,4 +9,6 @@
 #cmakedefine KINCAT_ENABLE_SITE_TYPE_SHORT
 #cmakedefine KINCAT_ENABLE_SITE_TYPE_INT
 
+#cmakedefine HAVE_HDF5
+
 #endif
