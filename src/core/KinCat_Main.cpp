@@ -180,6 +180,8 @@ int main(int argc, char *argv[]) {
     real_type events_per_site(0.0);
     bool events_warning(false);
 
+    auto advance_start = std::chrono::steady_clock::now();
+
     try {
       Kokkos::RangePolicy<typename device_type::execution_space> domain_range_policy(0, n_domains);
       for (ordinal_type iter = 0; iter < n_kmc_kernel_launches && t_global(0) < t_end; ++iter) {
@@ -240,7 +242,14 @@ int main(int argc, char *argv[]) {
           epoch += 1;
         }
       }
-
+      auto advance_end = std::chrono::steady_clock::now();
+      std::chrono::duration<double> advance_duration = advance_end - advance_start;
+      std::cout << '\n';
+      std::cout << "Computation Time : " << advance_duration.count() << '\n' ;
+      std::cout << "Reached Simulation Time : " << t_global(0) << '\n';
+      counter.showMe(std::cout, "Counter", in._processes, verbose_iterate); 
+      std::cout << '\n';
+	    
       if (dump_flag) {
         dump.finalize(t_global, verbose);
       }
