@@ -1,6 +1,6 @@
 '''
 ======================================================================================
-kincat version 1.1
+kincat version 1.2
 Copyright (2023) NTESS
 https://github.com/sandia/kincat
 Copyright 2023 National Technology & Engineering Solutions of Sandia, LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government retains certain rights in this software.
@@ -33,8 +33,8 @@ from shutil import copyfile
 
 
 # Definition of variables
-version = "1.1"
-date = "05/13/2024"
+version = "1.2"
+date = "10/13/2025"
 tol = 1e-12  # numeric tolerance on the comparisons (machine error)
 tol_strain = 1e-6
 db_displ = 0.0003  #  fictitious displacement of each atom in a dumbbell (in lattice parameter units, with respect to dumbbell center)
@@ -1481,8 +1481,8 @@ def name2conf(name: str, all_defect_list: list, species: list) -> Configuration:
     return conf
 
 
-def confsites(event_coords: list, kira: float, crystal: Crystal, species: list)->list: #Finds all permutations of species on lattice, saves them in config_list
-    n = int(20) #estimate of maximum range needed to explore lattice.
+def confsites(event_coords: list, bystander_coords: list, kira: float, crystal: Crystal, species: list)->list: #Finds all sites that need to be considered for the relevant processes. 
+    n = int(10) #estimate of maximum range needed to explore lattice.
     limitp = [n, n, 0]
     limitm = [-n, -n, 0]
     coords_list=[]
@@ -1493,10 +1493,25 @@ def confsites(event_coords: list, kira: float, crystal: Crystal, species: list)-
                 tmp_coord=bulk[1:4]+trans
                 for coord in event_coords:
                     if distance(tmp_coord,np.array(coord),crystal=crystal)<=kira:
-                        #print("New Coord in range : ", tmp_coord)
-                        #print("Event Coord and Dist : ", coord , ", ", distance(tmp_coord,np.array(coord),crystal=crystal))
                         coords_list.append(bulk[1:4]+trans)
                         break
+    #print("Confsites")
+    #print("Found coords")
+    #print(coords_list)
+    #print("bystanders")
+    #print(bystander_coords)
+    for cord in bystander_coords:
+        match_flag = False
+        for coord in event_coords:
+            if are_equal_arrays(np.array(cord), np.array(coord)): #found in list
+                match_flag = True 
+                break 
+        if match_flag:
+            continue
+        else:
+            #print("Adding to event list: ",cord)
+            coords_list.append(cord)
+
     return coords_list
 
 
@@ -1758,7 +1773,7 @@ def check_configuration_exclusion(species_list: list, config_template: CatConfTe
                 r2=species_list[j].get_radius()
                 if (r2>0.0 and distances[i][j]>0.0):
                     temp=(r1+r2)-distances[i][j]
-                    if (temp>0.0):
+                    if (temp>=0.0): 
                         flag= False 
                 if not flag:
                     break
@@ -1812,12 +1827,16 @@ def find_all_events(allevents:list, config_species_lists:list, config_template: 
 def config_event_def(coords_list: list, jump_list: list, jump_set_list: list) -> list:
     #translates each event mechanism and related constraints into a set of constraints defined in terms of configuration site indicies.
     config_coords_dict={}
+    #print("internal list")
     for i,cord in enumerate(coords_list):
+        #print(np.array_str(np.array(cord)))
         config_coords_dict.update({np.array_str(np.array(cord)):str(i)})
+    
     config_jump_list=[]
     for i in jump_set_list:
         event = jump_list[i]
         config_cons=[]
+        #print("Checking event {}".format(event.get_name()))
         for cons in event.get_constraints():
             ini_ind=int(config_coords_dict[np.array_str(np.array(cons.get_iniposition()))])
             fin_ind=int(config_coords_dict[np.array_str(np.array(cons.get_finposition()))])
@@ -1925,14 +1944,19 @@ def sortcoordsinternal(coords:list) -> list:
 def find_event_coords_sets(jump_list:list) -> list: #finds sets of unique coordinates changed by a process/jump
     event_coords_sets = [[]]
     jump_list_sets = [[]]
+    bystander_coords_sets = [[]]
     n_jumps = len(jump_list)
     for event in range(n_jumps):
         cons = jump_list[event].get_constraints()
         cord_check = []
+        bystander_cord = []
         for con in range(len(cons)):
             #Assuming that initial and final positions are the same, All events coordinates described in terms of transmutations at those sites. 
             if cons[con].get_inispecies().get_name()!=cons[con].get_finspecies().get_name():
-                cord_check.append(cons[con].get_iniposition()) 
+                cord_check.append(cons[con].get_iniposition())
+            else: ## ??? Need to decide how to track bystander positions. Need to be included in configuration, but not in interaction range considerations
+                #cord_check.append(cons[con].get_iniposition())
+                bystander_cord.append(cons[con].get_iniposition())
         if len(cons) > 1: #need to sort, convert to lists so will sort. Convert back to arrays for matching
             cord_checklist = []
             for cord in range(len(cord_check)):
@@ -1941,18 +1965,36 @@ def find_event_coords_sets(jump_list:list) -> list: #finds sets of unique coordi
             for cord in range(len(cord_check)):
                 cord_check[cord] = np.array(cord_checklist[cord])
 
+            bystander_cord_checklist = []
+            for cord in range(len(bystander_cord)):
+                bystander_cord_checklist.append(bystander_cord[cord].tolist())
+            bystander_cord_checklist = sortcoords(bystander_cord_checklist)
+            for cord in range(len(bystander_cord)):
+                bystander_cord[cord] = np.array(bystander_cord_checklist[cord])
+
+
         if event == 0:
             event_coords_sets[0] = cord_check
             jump_list_sets[0] = [event]
+            bystander_coords_sets[0] = bystander_cord
+            #print("Seti : 0")
+            #print(cord_check)
+            #print("bystanders: ", bystander_cord)
             continue
         found_flag = False
         for seti in range(len(event_coords_sets)):
             match_flag = True
-            if len(event_coords_sets[seti]) == len(cord_check):
-                for coord in range(len(event_coords_sets[seti])):
+            if len(event_coords_sets[seti]) == len(cord_check): #check if event_coords match
+                for coord in range(len(event_coords_sets[seti])): 
                     if not are_equal_arrays(event_coords_sets[seti][coord], cord_check[coord]):
                         match_flag = False 
                         break
+                if match_flag: #check if bystander_coords match
+                    if len(bystander_coords_sets[seti]) == len(bystander_cord):
+                        for coord in range(len(bystander_coords_sets[seti])):
+                            if not are_equal_arrays(bystander_coords_sets[seti][coord],bystander_cord[coord]):
+                                match_flag = False 
+                                break
             else:
                 continue
 
@@ -1964,21 +2006,30 @@ def find_event_coords_sets(jump_list:list) -> list: #finds sets of unique coordi
         if not found_flag:
             event_coords_sets.append(cord_check)
             jump_list_sets.append([event])
-
-    return event_coords_sets, jump_list_sets
+            bystander_coords_sets.append(bystander_cord)
+            #print("Seti : ", len(event_coords_sets)-1)
+            #print(cord_check)
+            #print("bystanders: ", bystander_cord)
+    return event_coords_sets, jump_list_sets, bystander_coords_sets
 
 def find_event_coords(jump_list:list) -> list: #finds all unique coordinates changed by any process/jump
     event_coords = []
+    bystander_coords = []
     n_jumps = len(jump_list)
-    print("Searching ", n_jumps, " jumps")
+    #print(n_jumps, " jumps to search")
     for event in range(n_jumps):
+        #print("Event ", event)
         cons = jump_list[event].get_constraints()
         for con in range(len(cons)):
-            #Assuming that initial and final positions(coordinates) are the same, All events coordinates described in terms of transmutations at those sites. 
+            #print("Con ", con)
+            #print(cons[con].get_iniposition(), " ", cons[con].get_inispecies().get_name(), " ", cons[con].get_finspecies().get_name())
+            #Assuming that initial and final positions are the same, All events coordinates described in terms of transmutations at those sites. 
+            #Bystander sites (with defined species, but species does not change with process) now collected separately. These are added to configuration after interaction range considered. 
             if cons[con].get_inispecies().get_name()!=cons[con].get_finspecies().get_name():
                 cord_check = []
                 cord_check.append(cons[con].get_iniposition()) 
                 cord_check.append(cons[con].get_finposition())
+                #print("Add to cord_check")
 
                 for k in range(2):
                     found_flag = False
@@ -1988,9 +2039,10 @@ def find_event_coords(jump_list:list) -> list: #finds all unique coordinates cha
                            break
                     if not found_flag:
                         event_coords.append(cord_check[k])
-                        print("adding coord [",cord_check[k] ,"] for jump ", event, "called ", jump_list[event].get_name())
-
-    return event_coords
+            else: 
+                bystander_coords.append(cons[con].get_iniposition())
+                #print("Add to bystanders")
+    return event_coords, bystander_coords
 
 def index_round(x:float) -> int:
     r_x=round(x)

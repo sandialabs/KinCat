@@ -23,8 +23,7 @@ symmetry patterns. These patterns are used to construct an configuration array w
 for comparing against dictionary to identify the configuration and possible events.
 
 - ``value_type_2d_view<site_type,device_type> _sites``. 
-  - The site_type is determined at compile time i.e., ``char,short int, int`` to save bytes 
-    for frequent memory transfer between host and device. 
+  - The site_type is determined at compile time i.e., ``short int, int`` to save bytes for frequent memory transfer between host and device. 
   - ``_sites(sid,cid)`` stores the current status of species occupied on the site location (cid) 
     for the sample (sid).
   - ``copySites``. When 2d site view is used, it overwrites for all samples. For 1d site view input 

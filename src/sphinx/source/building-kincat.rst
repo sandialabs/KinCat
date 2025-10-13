@@ -55,23 +55,32 @@ We use macports for the standard software distributions of required tools and li
 Weaver
 ^^^^^^
 
-Weaver is a Sandia National Laboratories compute resource equipped with IBM Power9 processors accelerated by NVIDIA V100 GPU. We use the following modules. These modules may be changed as the system is upgraded.
+Weaver was a Sandia National Laboratories compute resource equipped with IBM Power9 processors accelerated by NVIDIA V100 GPU. Although it was recently taken offline, we include notes relating to Weaver, hoping that they may be a useful guide for building and running on other resources. We used the following modules.
 
 .. code-block:: bash
 
    module purge
-   module load devpack/20210226/openmpi/4.0.5/gcc/7.2.0/cuda/10.2.2
-   module swap cmake cmake/3.19.3
-   module swap boost boost/1.75.0
+   module load gcc/11.3.0
+   module load cuda/11.8.0
+   module load openmpi
+   module load cmake
+   module load openblas
+   module load ninja
+   module load git
+   module load boost
+   module load hdf5
+
+   export MYCXX=${KOKKOS_INSTALL_PATH}/bin/nvcc_wrapper
+   export INCLUDE=${OPENMPI_ROOT}/include:${INCLUDE}
 
    which gcc
-   /home/projects/ppc64le/gcc/7.2.0/bin/gcc
+   /projects/ppc64le-pwr9-rhel8/compilers/gcc/11.3.0/gcc/8.3.1/base/tchbki3/bin/gcc
    
    echo ${BOOST_ROOT}
-   /home/projects/ppc64le-pwr9/spack/opt/spack/linux-rhel7-power9le/gcc-7.2.0/boost-1.75.0-qf3d47g2bt3dhlbruldwpqfu3rqkrdtk
+   /projects/ppc64le-pwr9-rhel8/tpls/boost/1.80.0/gcc/11.3.0/base/wrmyc3o
 
    which cmake
-   /home/projects/ppc64le/cmake/3.19.3/bin/cmake
+   /projects/ppc64le-pwr9-rhel8/utilities/cmake/3.29.6/gcc/8.5.0/base/7ne4ua7/bin/cmake
 
    
 How to Build
@@ -153,30 +162,54 @@ The Boost library may be installed by the following script.
 KinCat
 ^^^^^^
 
-Build KinCat and link with Kokkos and Gtest. The following script shows how to compile KinCat on OSX while linking with TPLs explained above. 
+Build KinCat and link with Kokkos and Gtest. The following script shows how to compile KinCat on Weaver while linking with TPLs explained above. 
 
 .. code-block:: bash
 		
    cd ${KINCAT_BUILD_PATH}
    cmake \
-     -D CMAKE_INSTALL_PREFIX=${KINCAT_INSTALL_PATH} \
-     -D CMAKE_CXX_COMPILER="${MYCXX}" \
-     -D CMAKE_CXX_FLAGS="-g" \
-     -D CMAKE_EXE_LINKER_FLAGS="" \
-     -D CMAKE_BUILD_TYPE=RELEASE \
-     -D KINCAT_SITE_TYPE="char" \
-     -D KINCAT_ENABLE_DEBUG=OFF \
-     -D KINCAT_ENABLE_VERBOSE=ON \
-     -D KINCAT_ENABLE_TEST=ON \
-     -D KINCAT_ENABLE_EXAMPLE=ON \
-     -D KOKKOS_INSTALL_PATH="${KOKKOS_INSTALL_PATH}" \
-     -D GTEST_INSTALL_PATH="${GTEST_INSTALL_PATH}" \
-     ${KINCAT_REPOSITORY_PATH}/code/src
-   make -j install
-   export KINCAT_INSTALL_PATH=${KINCAT_INSTALL_PATH}
+        -D CMAKE_INSTALL_PREFIX=${KINCAT_INSTALL_PATH}\
+        -D CMAKE_CXX_COMPILER="${MYCXX}" \
+        -D CMAKE_CXX_FLAGS="-g -I${OPENMPI_ROOT}/include " \
+        -D CMAKE_EXE_LINKER_FLAGS=""\
+        -D CMAKE_BUILD_TYPE=RELEASE \
+        -D KINCAT_SITE_TYPE="char" \
+        -D KINCAT_ENABLE_DEBUG=OFF \
+        -D KINCAT_ENABLE_VERBOSE=ON \
+        -D KINCAT_ENABLE_TEST=ON \
+        -D KINCAT_ENABLE_EXAMPLE=ON \
+        -D KOKKOS_INSTALL_PATH="${KOKKOS_INSTALL_PATH}" \
+        -D GTEST_INSTALL_PATH="${GTEST_INSTALL_PATH}" \
+        -D HDF5_INCLUDE_DIRS="${HDF5_INC}" \
+        -D HDF5_LIBRARY_DIRS="${HDF5_LIB}" \
+        -D HDF5_LIBRARIES="hdf5" \
+        ${KINCAT_REPOSITORY_PATH}/src
 
-To install KinCat on Weaver (GPU platform), replace the C++ compiler with nvcc wrapper, providing ``-D CMAKE_COMPILER="${KOKKOS_INSTALL_PATH}/bin/nvcc_wrapper`` instead.    
-A successful installation creates the following directory structure in ``${KINCAT_INSTALL_PATH}``. Note that the ``site_type`` is determined at compile time. In the above cmake configuration, the type is set ``char`` and the max number of species in KinCat is 256. For a bigger simulation, users can set this ``short`` or ``int``.  
+To install KinCat on OSX, we use the following script. Note that in both scripts the HDF5 related keys are only needed if HDF5 functionality is desired. 
+
+.. code-block:: bash
+    
+   cmake \
+    -D CMAKE_INSTALL_PREFIX=${KINCAT_INSTALL_PATH} \
+    -D CMAKE_C_COMPILER="clang-mp-12" \
+    -D CMAKE_CXX_COMPILER="clang++-mp-12" \
+    -D CMAKE_CXX_FLAGS="-g" \
+    -D CMAKE_EXE_LINKER_FLAGS="" \
+    -D CMAKE_BUILD_TYPE=RELEASE \
+    -D KINCAT_ENABLE_DEBUG=OFF \
+    -D KINCAT_ENABLE_VERBOSE=ON \
+    -D KINCAT_ENABLE_TEST=ON \
+    -D KINCAT_ENABLE_EXAMPLE=ON \
+    -D KOKKOS_INSTALL_PATH="${HOME}/kokkos/kokkos_install/release" \
+    -D GTEST_INSTALL_PATH="/opt/local" \
+    -D HDF5_INCLUDE_DIRS="/usr/local/hdf5/include" \
+    -D HDF5_LIBRARY_DIRS="/usr/local/hdf5/lib" \
+    -D HDF5_LIBRARIES="hdf5"   \
+    ${KINCAT_SRC_PATH}
+
+
+A successful installation creates the following directory structure in ``${KINCAT_INSTALL_PATH}``. Note that the ``site_type`` is determined at compile time. In the above cmake configuration, the type is set ``char`` and the max number of species in KinCat is 256. For a bigger simulation, users can set this ``short`` or ``int``, though this is unlikely to be needed. Also note that currently the ``char`` setting is overwritten to use ``short`` instead. This is due to requiring a signed type since KinCatPy uses -1 to indicate an unspecified site in a configuration. 
+
 
 .. code-block:: bash
 
@@ -211,7 +244,31 @@ A successful installation creates the following directory structure in ``${KINCA
      - kincat-test.x: unit test executable
      - test-files: sample files that will be used in test 
 
+Spack
+^^^^^
+As an alternative to the 'manual' build instructions above, we have also created Spack build instructions. Spack is a package manager intended for scientific software, allowing for software and all of it's dependencies to be built with minimal user interaction. Note that this functionality has not been tested extensively. If Spack is not already available, it needs to be set up:
+
+.. code-block:: bash
+
+    git clone --depth=100 --branch=releases/v0.21 https://github.com/spack/spack.git ~/spack
+    cd ~/spack/
+    . share/spack/setup-env.sh
+
+While Spack often has recognized software packages, for now KinCat can only be built with a local spack package file.
+
+.. code-block:: bash
+
+    spack repo create kincat-local-repo
+    spack repo add {PATH_TO_SPACK_LOCAL}/kincat-local-repo
+    mkdir kincat-local-repo/packages/kincat
+    cp kincat/spack/kincat-package.py kincat-local-repo/packages/kincat/package.py
+
+This build file needs to be modified depending on the version of KinCat desired. Both the url reference and the version number and sha256 key should be updated. The version of Kokkos to be used may also be modified. Once Spack and the local repo are set up, KinCat should be able to be installed with just a single command:
+
+.. code-block:: bash
+    spack install kincat
+
+Because all the dependencies are also being installed, this may take several minutes. Note that the executable may be saved in an obscure directory.
+
 .. autosummary::
    :toctree: generated
-
-

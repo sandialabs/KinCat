@@ -111,7 +111,7 @@ findEvent(const ordinal_type sid, const Lattice<DT> &lattice, const ProcessDicti
 
   //This section is the sets configuration search method. It finds one configuration and variant for each set. 
   else {
-    const ordinal_type max_config_sets = 10;
+    const ordinal_type max_config_sets = 50;
     Kokkos::Array<ordinal_type, max_config_sets> idx_variant_local_array;
     Kokkos::Array<ordinal_type, max_config_sets> idx_configuration_array;
     

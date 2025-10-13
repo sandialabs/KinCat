@@ -188,13 +188,13 @@ int main(int argc, char *argv[]) {
         if (t_global(0) >= t_step) { // Only advance t_step if previous kernel reached it, ensures that kernels always
                                      // stop at requested intervals
           t_step += t_dt;
-          while ((t_global(0) >= t_step) && t_dt != 0) { // simulation lept past next t_step, step again...
+          while ((t_global(0) >= t_step) && t_dt != 0) { // simulation leapt past next t_step, step again...
             t_step += t_dt;
           }
         }
 
-        solver->advance(t, t_step, n_kmc_steps_per_kernel_launch, verbose);
-        counter.syncToHost();
+	solver->advance(t, t_step, n_kmc_steps_per_kernel_launch, verbose);
+	counter.syncToHost();
         //Check if sublattice algorithm has 'reasonable' steps
         if (in._solver_type == "sublattice") {
           ordinal_type proc_sum = counter.getTotalProcessCount(0);
@@ -218,21 +218,21 @@ int main(int argc, char *argv[]) {
             reducer_value);
         KINCAT_CHECK_ERROR(t_prev == t_global(0) && t_global(0) < t_end, "Error: time does not advance");
 
-        if (dump_flag) {
+	if (dump_flag) {
           if (t_global(0) >= dump_step) {
             dump.snapshot(t_global, verbose);
             dump_step += dump_interval;
           }
         }
 
-        if (stats_flag) {
+	if (stats_flag) {
           if (t_global(0) >= stats_step) {
             stats.snapshot(t_global, verbose);
             stats_step += stats_interval;
           }
         }
 	
-        if (t_global(0) >= t_step) {
+	if (t_global(0) >= t_step) {
           if (verbose_iterate) {
             std::cout << " epoch = " << epoch << ", t = " << t_global(0) << "\n";
             counter.showMe(std::cout, "Counter", in._processes, verbose_iterate);

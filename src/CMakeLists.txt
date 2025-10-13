@@ -145,12 +145,10 @@ ENDIF()
 # #
 # # HDF5 (dumping data)
 # #
-MESSAGE("-- Before HDF5 setting --")
 IF (HDF5_LIBRARY_DIRS)
   link_directories(${HDF5_LIBRARY_DIRS})
   LIST(APPEND KINCAT_LINK_LIBRARIES ${HDF5_LIBRARIES})
   SET(HAVE_HDF5 ON)
-  MESSAGE("-- HDF5 should be enabled --")
 ENDIF()
 
 #
@@ -179,6 +177,4 @@ ENDIF()
 # IF (KINCAT_ENABLE_EXAMPLE)
 #   ADD_SUBDIRECTORY (examples)
 # ENDIF()
-
-
 
