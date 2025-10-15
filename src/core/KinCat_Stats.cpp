@@ -79,12 +79,12 @@ ordinal_type Stats<DT>::initialize(const value_type_1d_view<real_type, host_devi
     _hdf5_stats.Write("Stats", "lattice.shape.dim1", n_cells_x);
     _hdf5_stats.Write("Stats", "lattice.shape.dim2", n_cells_y);
     _hdf5_stats.Write("Stats", "lattice.shape.basis", n_basis_sites);
-    //_hdf5_stats.Write("Stats", "samples", n_samples);
-    //_hdf5_stats.Write("Stats", "number.of.species", n_species);
-    //_hdf5_stats.Write("Stats", "number.of.processes", _n_processes);
+    _hdf5_stats.Write("Stats", "samples", n_samples);
+    _hdf5_stats.Write("Stats", "number.of.species", n_species);
+    _hdf5_stats.Write("Stats", "number.of.processes", _n_processes);
     for (ordinal_type i = 0, iend = _n_processes; i < iend; i++) {
       std::string ProcessName = std::string("process.") + std::to_string(i);
-      //_hdf5_stats.Write("Stats", ProcessName, _processes[i]);
+      _hdf5_stats.Write("Stats", ProcessName, _processes[i]);
     }
 
 #else
@@ -174,7 +174,6 @@ ordinal_type Stats<DT>::snapshot(const ordinal_type sid, const real_type t,
       _hdf5_stats.Write("Stats", DataSetName + ".time", t);
 
       if (_s_c) {
-        //_ofstats << ",\n" << indent3 << "\"species coverage\" : [ ";
         ordinal_type spec_coverages[n_species];
         for (ordinal_type i = 0, iend = n_species; i < iend; ++i) {
           spec_coverages[i] = 0;
@@ -187,25 +186,23 @@ ordinal_type Stats<DT>::snapshot(const ordinal_type sid, const real_type t,
 
         value_type_1d_view<real_type, host_device_type> coverage ("coverage view", n_species);
 
-        //real_type coverage = real_type(spec_coverages[0]) / denom;
-        //_ofstats << coverage;
+	//real_type coverage = real_type(spec_coverages[0]) / denom;
         for (ordinal_type i = 0, iend = n_species; i < iend; ++i) {
           coverage(i) = real_type(spec_coverages[i]) / denom;
-          //_ofstats << ", " << coverage;
         }
         _hdf5_stats.WriteDoubleView1D("Stats", DataSetName + ".coverage", coverage);
         //_ofstats << " ]";
       }
       if (_p_c) {
         value_type_1d_view<size_type, host_device_type> process_count = _counter.getProcessCounterHost(sid);
-        value_type_1d_view<int, host_device_type> process_count_ints ("process counter ints", process_count.extent(0));
-        ordinal_type temp_count = 0;
-        for (ordinal_type i = 0, iend = process_count.extent(0); i < iend; i++) {
+        value_type_1d_view<int, host_device_type> process_count_ints ("process counter ints", _n_processes);//process_count.extent(0));
+	ordinal_type temp_count = 0;
+        for (ordinal_type i = 0, iend = _n_processes; i < iend; i++) {
           temp_count = 0;
           for (ordinal_type j = 0, jend = _n_domains; j < jend; j++) {
-            temp_count += int(process_count(i + (j*_n_processes)));
+	      temp_count += int(process_count(i + (j*_n_processes)));
           }
-          process_count_ints(i) = temp_count;//int(process_count(i));
+	  process_count_ints(i) = temp_count;//int(process_count(i));
         }
         _hdf5_stats.WriteIntView1D("Stats", DataSetName + ".processcounts", process_count_ints);
       }
@@ -236,6 +233,7 @@ ordinal_type Stats<DT>::snapshot(const ordinal_type sid, const real_type t,
       _is_first = false;
 
       _nextSnapshotID++;
+
 
     }
 #else
@@ -339,7 +337,6 @@ ordinal_type Stats<DT>::snapshot(const value_type_1d_view<real_type, host_device
   } else { 
     KINCAT_CHECK_ERROR(!_ofstats.is_open(), ss.str().c_str());
   }
-
   Kokkos::deep_copy(_lattice_host._sites, _lattice._sites); // Needed?
 
   for (ordinal_type i = 0, iend = _lattice_host._sites.extent(0); i < iend; ++i) {

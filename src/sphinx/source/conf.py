@@ -6,8 +6,8 @@ project = 'KinCat'
 copyright = '2022, Sandia National Labs'
 author = 'Kyungjoo Kim, Craig Daniels, Habib Najm'
 
-release = '1.0'
-version = '1.0.0'
+release = '1.2'
+version = '1.2.0'
 
 # -- General configuration
 

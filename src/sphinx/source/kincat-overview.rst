@@ -36,7 +36,7 @@ A basic KMC algorithm is below. This is often called the resident time algorithm
      }
    }
 
-The sublattice algorithm decomposes the lattice into multiple subdomains. In each subdomain, a sequential RTA algorithm runs and time is updated asynchronously. To avoid the potential conflicts on the boundary regions, the algorithm updates even and odd numbered domains separately.
+The sublattice algorithm decomposes the lattice into multiple subdomains. In each subdomain, a sequential RTA algorithm runs and time is updated asynchronously. To avoid the potential conflicts on the boundary regions, the algorithm updates a single set of independent domains at a time.
 
 .. code-block:: c++
 
@@ -91,7 +91,7 @@ The sublattice algorithm decomposes the lattice into multiple subdomains. In eac
      }
    }
 
-The batch RTA solver runs the serial RTA, but in multiple independent simulations or samples. This may be desired for statistical or UQ analysis. The user interface and container structure needs to be changed to handle the use case correctly. For the batch mode, we implement a separate executable. 
+The batch RTA solver runs the serial RTA, but in multiple independent simulations or samples. This may be desired for statistical or UQ analysis. For the batch mode, we implement a separate executable. 
 
 .. autosummary::
    :toctree: generated

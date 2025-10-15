@@ -3,7 +3,7 @@
 
 '''
 ======================================================================================
-kincat version 1.1
+kincat version 1.2
 Copyright (2023) NTESS
 https://github.com/sandia/kincat
 Copyright 2023 National Technology & Engineering Solutions of Sandia, LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government retains certain rights in this software.
@@ -278,7 +278,6 @@ if full_sym_flag:
     jump_sym_list=[[0] for _ in jump_list]
 
 n_jumps = len(jump_list)  # total number of jump mechanisms (including symmetry equivalent ones)
-
 #Create initial configuration 
 #empty configuration assumes adsorbtion/desorption processes present
 logger.info("Exploring Configuration Definition (starts at {:.3f} s)".format(tm.time()-start_time))
@@ -287,16 +286,24 @@ logger.info("Exploring Configuration Definition (starts at {:.3f} s)".format(tm.
 #Should there be any checking of equivalent coordinates by symmetry or translation?
     #Simpler to not
     #Checking symmetry can reduce number of configurations, so could be valuable...
-event_coords = kp.find_event_coords(jump_list)
+event_coords, bystander_coords = kp.find_event_coords(jump_list)
+#print("Regular Event Coords")
+#for i in range(len(event_coords)):
+#    print(event_coords[i])
+#print("Regular Bystander Coords")
+#for i in range(len(bystander_coords)):
+#    print(bystander_coords[i])
 if uniconfig_flag:
     event_coords_sets = []
     event_coords_sets.append(event_coords)
     jump_list_sets = [[ i for i in range(len(jump_list))]]
+    bystander_coords_sets = []
+    bystander_coords_sets.append(bystander_coords)
 else:
-    event_coords_sets, jump_list_sets = kp.find_event_coords_sets(jump_list)
+    event_coords_sets, jump_list_sets, bystander_coords_sets = kp.find_event_coords_sets(jump_list)
 n_event_coords_sets = len(event_coords_sets)
 if not full_sym_flag: #If exploring reduced symmetry, still need to find interaction range of full symmetry for KinCat KMC. 
-    full_event_coords = kp.find_event_coords(sym_jump_list)
+    full_event_coords , full_bystander_coords = kp.find_event_coords(sym_jump_list)
 
 logger.info("Found {:} process coordinates.".format(len(event_coords)))
 logger.info("Found {:} process coordinate sets.".format(n_event_coords_sets))
@@ -307,27 +314,26 @@ for event in jump_list:
     event_str_list.append(str(event.get_name()))
 
 logger.info("Finding configuration sites.")
-
-coords_list = kp.confsites(event_coords=event_coords, kira=KiRa, crystal=crystal, species=species_list) #finds all the sites that need to be specified
+#print("Regular Confsites")
+coords_list = kp.confsites(event_coords=event_coords, bystander_coords=bystander_coords, kira=KiRa, crystal=crystal, species=species_list) #finds all the sites that need to be specified
+#print("Sets Confsites")
 coords_list_sets = []
 for i in range(n_event_coords_sets):
-    temp_list = kp.confsites(event_coords=event_coords_sets[i], kira=KiRa, crystal=crystal, species=species_list) #finds all the sites that need to be specified
+    temp_list = kp.confsites(event_coords=event_coords_sets[i], bystander_coords=bystander_coords_sets[i], kira=KiRa, crystal=crystal, species=species_list) #finds all the sites that need to be specified
     coords_list_sets.append(temp_list)
-
+#print("Full Confsites")
 if not full_sym_flag:
-    full_coords_list=kp.confsites(event_coords=full_event_coords, kira=KiRa, crystal=crystal, species=species_list) #finds all sites needed to be specified in full symmetry case
+    full_coords_list=kp.confsites(event_coords=full_event_coords, bystander_coords =full_bystander_coords, kira=KiRa, crystal=crystal, species=species_list) #finds all sites needed to be specified in full symmetry case
     tmp=len(full_coords_list[0])
     x_max=0
     x_min=0
     y_max=0
     y_min=0
-    print("Fullsym Coordinates")
     for cord in full_coords_list:
         x_max=max(cord[0],x_max)
         x_min=min(cord[0],x_min)
         y_max=max(cord[1],y_max)
         y_min=min(cord[1],y_min)
-        print("[", cord[0], ",", cord[1],"]")
     x_max=kp.index_round(x_max)
     x_min=kp.index_round(x_min)
     y_max=kp.index_round(y_max)
@@ -351,7 +357,6 @@ else:
     y_min=kp.index_round(y_min)
     x_interaction=x_max-x_min
     y_interaction=y_max-y_min
-logger.info("Configuration Mins and Maxes : [{:}, {:}], [{:}, {:}]".format(x_min,y_min,x_max,y_max))
 logger.info("Found {:} configuration coordinates.)".format(len(coords_list)))
 if full_sym_flag:
         config_sym_relationships=[[cord for cord in range(len(coords_list))]]
@@ -376,6 +381,9 @@ else:
         config_sym_relationships_sets.append(temp_config_sym_relationships)
         config_sym_relationships_dict.update({str(i):temp_config_sym_relationships})
 #Translate event mechanisms into configuration index operations
+#for i in range(len(coords_list)):
+#    print(coords_list[i])
+#print()
 config_event_list=kp.config_event_def(coords_list=coords_list, jump_list= jump_list, jump_set_list=range(len(jump_list))) #may not need this anymore
 config_sets_event_list = []
 for i in range(n_event_coords_sets):
@@ -383,10 +391,7 @@ for i in range(n_event_coords_sets):
 
 
 config_json_dict={}
-config_json_dict.update({"interaction range":[int(x_interaction),int(y_interaction)]}) #Previous method added 1 to each
-print("found interaction range : [", int(x_interaction), ", ", int(y_interaction), "]")
-#config_json_dict.update({"interaction range":[int(max(np.abs(x_max),np.abs(x_min))),int(max(np.abs(y_max),np.abs(y_min)))]}) 
-#print("found interaction range : [", int(max(np.abs(x_max),np.abs(x_min))), ", ", int(max(np.abs(y_max),np.abs(y_min))), "]")
+config_json_dict.update({"interaction range":[int(x_interaction+1),int(y_interaction+1)]})
 json_coords=[]
 for i in range(len(coords_list)):
     tmp=coords_list[i].tolist()
@@ -485,7 +490,7 @@ config_species_lists=[[] for _ in range(n_event_coords_sets)] #filled by permute
 print_search_flag = False
 if (((n_species+1)**n_coords_max)>100000):
     print_search_flag = True
-    print("Need to search ", ((n_species+1)**n_coords_max), " potential configurations.")
+    logger.info("Need to search {:} potential configurations.".format((n_species+1)**n_coords_max))
 permute_species_configs(ix=1,perm=[])
 complete_config_list = []
 n_full_coords = len(coords_list)

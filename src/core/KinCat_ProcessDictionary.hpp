@@ -173,7 +173,7 @@ public:
 
   KOKKOS_INLINE_FUNCTION
   bool searchConfiguration(const key_type &input_key, 
-                           Kokkos::Array<ordinal_type, 10> &idx_variant_array, Kokkos::Array<ordinal_type,10> & idx_configuration_array, const ordinal_type n_configs) const {
+                           Kokkos::Array<ordinal_type, 50> &idx_variant_array, Kokkos::Array<ordinal_type,50> & idx_configuration_array, const ordinal_type n_configs) const {
     
     bool all_found(false);
     ordinal_type configs_found = 0;

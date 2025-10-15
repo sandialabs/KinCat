@@ -3,4 +3,3 @@
 INCLUDE("${CMAKE_CURRENT_LIST_DIR}/kincat-targets.cmake")
 CHECK_REQUIRED_COMPONENTS(kincat)
 INCLUDE(CMakeFindDependencyMacro)
-
